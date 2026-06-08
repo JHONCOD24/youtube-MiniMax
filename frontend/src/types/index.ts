@@ -203,7 +203,9 @@ export interface PlanItem {
   id: string;
   titulo: string;
   fecha: string;
+  hora?: string;
   estado: 'idea' | 'guion' | 'grabado' | 'publicado';
   nicho?: string;
 }
+
 

@@ -221,6 +221,11 @@ export function IdeasPage() {
 
                 {expandida && (
                   <div className="mb-4 space-y-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3.5">
+                    {!(idea.estructuraSugerida?.length || idea.justificacionMetricas || idea.desgloseKB || idea.desgloseInvestigacion || idea.fuentes?.length) && (
+                      <p className="text-xs text-slate-500 italic text-center py-1">
+                        Esta idea fue generada con una versión anterior. Haz clic en "Regenerar ideas" arriba para ver el nuevo desglose de tu documentación y la investigación de YouTube.
+                      </p>
+                    )}
                     {Array.isArray(idea.estructuraSugerida) && idea.estructuraSugerida.length > 0 && (
                       <div>
                         <p className="text-xs text-slate-500 font-semibold mb-1.5">Estructura sugerida</p>

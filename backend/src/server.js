@@ -30,10 +30,10 @@ app.use(cors({
     if (!origin) return callback(null, true);
     
     const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-    const isNetlify = origin.endsWith('.netlify.app');
+    const isNetlifyOrVercel = origin.endsWith('.netlify.app') || origin.endsWith('.vercel.app');
     const allowedOrigins = CORS_ORIGIN.split(',').map((o) => o.trim());
     
-    if (isLocalhost || isNetlify || allowedOrigins.includes(origin)) {
+    if (isLocalhost || isNetlifyOrVercel || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Bloqueado por política CORS'));

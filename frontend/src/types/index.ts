@@ -131,6 +131,11 @@ export interface GeneratedAssets {
     // Pasos en orden para subir y publicar correctamente
     checklistSubida: string[];
   };
+  fuentesUtilizadas?: {
+    kb: string[];
+    investigacion: string[];
+    explicacion: string;
+  };
 }
 
 export type VideoFormato = 'short' | 'largo';

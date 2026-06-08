@@ -5,7 +5,7 @@ import { DEMO_IDEAS, DEMO_ASSETS, DEMO_MONETIZACION } from '../data/demo';
 import { useApp } from '../store/useApp';
 
 const JSON_HINT_IDEAS = `{ideas: [{titulo, hook, angulo, porQueViral, promesaValor, estructuraSugerida, justificacionMetricas, origen, fuentes}]}`;
-const JSON_HINT_ASSETS = `{titulos,guion,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion}`;
+const JSON_HINT_ASSETS = `{titulos,guion,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion,fuentesUtilizadas}`;
 
 function withRatio(prompt: string, ratio: '9:16' | '16:9') {
   if (!prompt) return prompt;
@@ -67,8 +67,8 @@ Requisitos por idea:
 - por qué podría viralizar (mecanismo: curiosidad, controversia, transformación, lista, etc.)
 - estructura sugerida (5-8 bullets con tiempos aproximados)
 - justificación de métricas (por qué debería subir CTR/retención/VPH)
-- origen: "kb" | "ai" | "hibrida"
-- fuentes: array de referencias. Si usas KB, referencia con "[KB:<id>]" exacto.
+- origen: "kb" (si proviene principalmente de tu Base de Conocimiento), "ai" (si es una idea general del nicho surgida de la investigación de YouTube), "hibrida" (si cruza/condensa información de tu KB con la investigación de YouTube).
+- fuentes: array de referencias específicas. Si usas información de tu Base de Conocimiento, DEBES incluir el ID exacto del documento formateado como "[KB:<id>]" (ej. "[KB:doc-id]"). Si usas datos de los videos analizados, outliers o canales de la investigación, incluye el título o canal formateado como "[Investigación: <título o canal>]" (ej. "[Investigación: Outlier - 5 Hábitos]").
 
 Contexto del análisis:
 - Resumen: ${opts.investigacion.resumen}
@@ -76,7 +76,7 @@ Contexto del análisis:
 - Subnichos: ${opts.investigacion.subNichos.join(', ')}
 - Ángulos: ${opts.investigacion.angulos.join(', ')}
 
-${opts.knowledgeBase ? `\nBase de conocimiento del usuario:\n${opts.knowledgeBase}\n` : ''}
+${opts.knowledgeBase ? `\nBase de conocimiento del usuario (DEBES utilizarla activamente para cruzar datos y enriquecer las ideas híbridas):\n${opts.knowledgeBase}\n` : ''}
 
 Devuelve un JSON con esta forma: ${JSON_HINT_IDEAS}`;
   const settings = useApp.getState().settings;
@@ -185,6 +185,11 @@ Devuelve un JSON con:
       "tips": "1-2 técnicas concretas para que ESTE Short funcione mejor (gancho en el primer 1-2s, loop perfecto entre el último y primer frame, texto en pantalla legible sin sonido, etc.)"
     },
     "checklistSubida": ["6 a 9 pasos NUMERADOS en el orden exacto a seguir en YouTube Studio para subir, configurar y publicar este video correctamente, desde 'Subir video' hasta la promoción post-publicación"]
+  },
+  "fuentesUtilizadas": {
+    "kb": ["array con los IDs exactos (ej. \\\"doc-id-1\\\") de los documentos de tu base de conocimientos que se usaron en este guion/paquete"],
+    "investigacion": ["array con referencias de la investigación de YouTube (outliers, subnichos, ángulos, competidores) que inspiraron este guion/paquete"],
+    "explicacion": "explicación en un párrafo corto sobre cómo se unificó e integró la información del usuario con los datos de investigación de YouTube"
   }
 }
 
@@ -195,6 +200,7 @@ Reglas:
 - Los prompts de imagen/video deben ser EN INGLÉS y consistentes en estilo/personajes/locación entre escenas.
 - En "guion", CADA sección debe incluir obligatoriamente la línea [VISUAL: ...] con la indicación de cámara/escena, seguida de la línea VOZ EN OFF: con el texto narrado. Sin excepciones.
 - TODO el contenido de "estrategiaPublicacion" debe estar listo para copiar y pegar directamente en YouTube Studio (sin placeholders genéricos tipo "[tu canal]"; usa información real de la idea y el nicho) y basarse en buenas prácticas reales de viralidad para el nicho indicado.
+- En "fuentesUtilizadas", relaciona de forma honesta qué elementos de la base de conocimientos y qué videos de la investigación influyeron.
 
 Responde en español salvo los prompts (que van en inglés para mejor calidad).`;
 
@@ -245,6 +251,7 @@ Responde en español salvo los prompts (que van en inglés para mejor calidad).`
     promptMusica: data.promptMusica || '',
     promptMusicaGemini: data.promptMusicaGemini || '',
     estrategiaPublicacion: normalizeEstrategia(data.estrategiaPublicacion),
+    fuentesUtilizadas: normalizeFuentes(data.fuentesUtilizadas),
   };
 }
 
@@ -279,6 +286,15 @@ function toStringArray(v: any): string[] {
   if (Array.isArray(v)) return v.map((x) => toText(x, '')).filter(Boolean);
   if (typeof v === 'string') return v.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
   return [];
+}
+
+export function normalizeFuentes(f: any): GeneratedAssets['fuentesUtilizadas'] {
+  const src = f || {};
+  return {
+    kb: Array.isArray(src.kb) ? src.kb.map(String).filter(Boolean) : [],
+    investigacion: Array.isArray(src.investigacion) ? src.investigacion.map(String).filter(Boolean) : [],
+    explicacion: typeof src.explicacion === 'string' ? src.explicacion.trim() : '',
+  };
 }
 
 // Normaliza la estrategia de publicación devuelta por la IA, rellenando con
@@ -401,6 +417,11 @@ Devuelve un JSON con esta forma exacta (sin el campo "guion", que ya está fijad
     "publicacionComunidad": "texto listo para copiar y pegar en la pestaña Comunidad anunciando este video",
     "shorts": {"hashtags": "string con hashtags exactos incluyendo #Shorts", "musica": "guía de audio/música para el feed de Shorts", "tips": "1-2 técnicas concretas para este Short"},
     "checklistSubida": ["6 a 9 pasos numerados para subir y publicar este video en YouTube Studio"]
+  },
+  "fuentesUtilizadas": {
+    "kb": ["array con los IDs exactos (ej. \\\"doc-id-1\\\") de los documentos de tu base de conocimientos que se usaron en este guion/paquete"],
+    "investigacion": ["array con referencias de la investigación de YouTube (outliers, subnichos, ángulos, competidores) que inspiraron este guion/paquete"],
+    "explicacion": "explicación en un párrafo corto sobre cómo se unificó e integró la información del usuario con los datos de investigación de YouTube"
   }
 }
 
@@ -411,6 +432,7 @@ Reglas estrictas:
 - "thumbnails" debe traer 3 opciones distintas en 16:9.
 - "timestamps" debe coincidir con la estructura real del guion editado (no dejes los del guion anterior).
 - Prompts de imagen/video EN INGLÉS y consistentes en estilo/personajes/locación entre escenas.
+- En "fuentesUtilizadas", relaciona de forma honesta qué elementos de la base de conocimientos y qué videos de la investigación influyeron.
 
 Responde en español salvo los prompts (que van en inglés para mejor calidad).`;
 
@@ -421,7 +443,7 @@ Responde en español salvo los prompts (que van en inglés para mejor calidad).`
   const settings = useApp.getState().settings;
   const provider = settings.proveedorIA;
   const system = 'Eres un experto en producción de contenido viral de YouTube en español. Resincronizas todos los activos al guion editado por el usuario sin alterar el guion.';
-  const hint = '{titulos,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion}';
+  const hint = '{titulos,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion,fuentesUtilizadas}';
   let data;
   if (provider === 'claude') {
     data = await api.claudeJSON(prompt + kbBlock, system, hint, settings.modeloClaude);
@@ -470,6 +492,9 @@ Responde en español salvo los prompts (que van en inglés para mejor calidad).`
     estrategiaPublicacion: data.estrategiaPublicacion
       ? normalizeEstrategia(data.estrategiaPublicacion)
       : opts.prevAssets.estrategiaPublicacion || normalizeEstrategia(null),
+    fuentesUtilizadas: data.fuentesUtilizadas
+      ? normalizeFuentes(data.fuentesUtilizadas)
+      : opts.prevAssets.fuentesUtilizadas || normalizeFuentes(null),
   };
 }
 

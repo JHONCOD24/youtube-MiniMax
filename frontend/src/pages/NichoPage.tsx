@@ -5,7 +5,7 @@ import { NICHOS } from '../data/niches';
 import * as Icons from 'lucide-react';
 import { Search, Sparkles, BookOpen, Upload, Trash2, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { kbIngestFiles } from '../services/kbClient';
+import { kbIngestFiles, kbIngestText } from '../services/kbClient';
 import { kbDelete } from '../services/kbDb';
 import { formatNumber } from '../utils/format';
 
@@ -14,6 +14,9 @@ export function NichoPage() {
   const [query, setQuery] = useState('');
   const [kbError, setKbError] = useState('');
   const [kbLoading, setKbLoading] = useState(false);
+  const [showPasteForm, setShowPasteForm] = useState(false);
+  const [pasteTitle, setPasteTitle] = useState('');
+  const [pasteText, setPasteText] = useState('');
   const navigate = useNavigate();
 
   const filtrados = NICHOS.filter((n) =>
@@ -79,32 +82,108 @@ export function NichoPage() {
             </p>
           </div>
 
-          <label className="btn-secondary cursor-pointer">
-            {kbLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo…</> : <><Upload className="w-4 h-4" /> Subir archivos</>}
-            <input
-              type="file"
-              multiple
-              accept=".pdf,.docx,.txt,.md"
-              className="hidden"
-              disabled={kbLoading}
-              onChange={async (e) => {
-                const files = Array.from(e.target.files || []);
-                e.target.value = '';
-                if (!files.length) return;
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setShowPasteForm(!showPasteForm);
                 setKbError('');
-                setKbLoading(true);
-                try {
-                  const metas = await kbIngestFiles(proyecto.id, files);
-                  addKnowledgeDocs(metas);
-                } catch (err: any) {
-                  setKbError(err?.message || 'No se pudieron cargar los archivos.');
-                } finally {
-                  setKbLoading(false);
-                }
+                setPasteTitle('');
+                setPasteText('');
               }}
-            />
-          </label>
+              className="btn-secondary"
+              disabled={kbLoading}
+            >
+              <Icons.Plus className="w-4 h-4" /> Pegar texto
+            </button>
+
+            <label className="btn-secondary cursor-pointer">
+              {kbLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo…</> : <><Upload className="w-4 h-4" /> Subir archivos</>}
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.docx,.txt,.md"
+                className="hidden"
+                disabled={kbLoading}
+                onChange={async (e) => {
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  if (!files.length) return;
+                  setKbError('');
+                  setKbLoading(true);
+                  try {
+                    const metas = await kbIngestFiles(proyecto.id, files);
+                    addKnowledgeDocs(metas);
+                  } catch (err: any) {
+                    setKbError(err?.message || 'No se pudieron cargar los archivos.');
+                  } finally {
+                    setKbLoading(false);
+                  }
+                }}
+              />
+            </label>
+          </div>
         </div>
+
+        {showPasteForm && (
+          <div className="mt-4 p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 space-y-3">
+            <h4 className="text-sm font-bold">Pegar texto para la base de conocimientos</h4>
+            <div className="space-y-2">
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Título del documento</label>
+                <input
+                  value={pasteTitle}
+                  onChange={(e) => setPasteTitle(e.target.value)}
+                  placeholder="Ej: Guion de referencia, Info del nicho, Plantilla..."
+                  className="input text-sm mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Contenido del texto</label>
+                <textarea
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder="Pega aquí la información, guion o notas..."
+                  className="input text-sm min-h-[120px] mt-1 font-mono"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setShowPasteForm(false)}
+                className="btn-secondary text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => {
+                  const title = pasteTitle.trim();
+                  const text = pasteText.trim();
+                  if (!text) {
+                    setKbError('Por favor ingresa algún texto.');
+                    return;
+                  }
+                  setKbError('');
+                  setKbLoading(true);
+                  try {
+                    const meta = await kbIngestText(proyecto.id, title || 'Texto copiado', text);
+                    addKnowledgeDocs([meta]);
+                    setShowPasteForm(false);
+                    setPasteTitle('');
+                    setPasteText('');
+                  } catch (err: any) {
+                    setKbError(err?.message || 'Error al guardar el texto.');
+                  } finally {
+                    setKbLoading(false);
+                  }
+                }}
+                className="btn-primary text-xs"
+                disabled={!pasteText.trim()}
+              >
+                Guardar documento
+              </button>
+            </div>
+          </div>
+        )}
 
         {kbError && <div className="mt-3 text-sm text-red-600 dark:text-red-300">{kbError}</div>}
 

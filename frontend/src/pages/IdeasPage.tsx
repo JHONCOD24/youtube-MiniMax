@@ -236,9 +236,26 @@ export function IdeasPage() {
                       </p>
                     )}
                     {Array.isArray(idea.fuentes) && idea.fuentes.length > 0 && (
-                      <p className="text-xs text-slate-500">
-                        <span className="font-semibold">Fuentes:</span> {idea.fuentes.slice(0, 4).join(' · ')}
-                      </p>
+                      <div className="text-xs text-slate-500 flex flex-wrap gap-1 items-center mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <span className="font-semibold text-slate-500">Fuentes:</span>
+                        {idea.fuentes.slice(0, 5).map((f, idx) => {
+                          let label = f;
+                          let isKb = false;
+                          if (f.startsWith('[KB:')) {
+                            isKb = true;
+                            const id = f.replace('[KB:', '').replace(']', '').trim();
+                            const doc = proyecto.knowledgeBase?.find((d) => d.id === id);
+                            label = doc ? `Doc: ${doc.name}` : `Documento KB`;
+                          } else if (f.startsWith('[Investigación:')) {
+                            label = f.replace('[Investigación:', '').replace(']', '').trim();
+                          }
+                          return (
+                            <span key={idx} className={`chip text-[10px] px-1.5 py-0.5 max-w-[180px] truncate ${isKb ? 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`} title={label}>
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 )}

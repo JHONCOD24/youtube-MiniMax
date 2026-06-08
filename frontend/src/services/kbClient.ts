@@ -60,6 +60,28 @@ export async function kbIngestFiles(projectId: string, files: File[], maxBytes =
   return metas;
 }
 
+export async function kbIngestText(projectId: string, name: string, text: string, maxBytes = 10 * 1024 * 1024): Promise<KnowledgeDocMeta> {
+  const current = await kbTotalBytes(projectId);
+  const size = new Blob([text]).size;
+  if (current + size > maxBytes) {
+    throw new Error('Límite excedido: máximo 10 MB por proyecto.');
+  }
+
+  const id = uid();
+  const createdAt = new Date().toISOString();
+  const rec: KbDocRecord = {
+    id,
+    projectId,
+    name: name.trim() || 'Texto copiado',
+    mime: 'text/plain',
+    size,
+    createdAt,
+    text: text.trim(),
+  };
+  await kbPut(rec);
+  return { id, name: rec.name, mime: rec.mime, size: rec.size, createdAt };
+}
+
 export async function kbRemove(projectId: string, id: string): Promise<void> {
   await kbDelete(id);
   const existing = await kbListByProject(projectId);

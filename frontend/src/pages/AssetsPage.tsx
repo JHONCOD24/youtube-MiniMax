@@ -191,6 +191,50 @@ export function AssetsPage() {
             </div>
           </div>
 
+          {a.fuentesUtilizadas && (a.fuentesUtilizadas.kb?.length > 0 || a.fuentesUtilizadas.investigacion?.length > 0) && (
+            <div className="card p-5 border-l-4 border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-4">
+              <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                <Layers className="w-5 h-5 text-emerald-500" />
+                Síntesis de fuentes condensadas en estos activos
+              </div>
+              {a.fuentesUtilizadas.explicacion && (
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {a.fuentesUtilizadas.explicacion}
+                </p>
+              )}
+              <div className="flex flex-col sm:flex-row gap-4 text-xs">
+                {a.fuentesUtilizadas.kb.length > 0 && (
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">De tu Base de Conocimiento</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {a.fuentesUtilizadas.kb.map((f, idx) => {
+                        const doc = proyecto.knowledgeBase?.find(d => d.id === f);
+                        const label = doc ? doc.name : `Doc: ${f}`;
+                        return (
+                          <span key={idx} className="chip bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/40 max-w-[200px] truncate" title={label}>
+                            {label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {a.fuentesUtilizadas.investigacion.length > 0 && (
+                  <div className="flex-1 min-w-0">
+                    <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">De la Investigación del Nicho</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {a.fuentesUtilizadas.investigacion.map((f, idx) => (
+                        <span key={idx} className="chip bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-900/40 max-w-[200px] truncate" title={f}>
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-1">
             <ActiveTabIcon className="w-4 h-4 text-brand-500" />
             <span>Estas viendo: <span className="font-semibold text-slate-800 dark:text-slate-100">{activeTab.label}</span></span>

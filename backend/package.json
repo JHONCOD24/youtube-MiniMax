@@ -1,0 +1,26 @@
+{
+  "name": "youtube-niche-lab-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Proxy ligero para YouTube Data API v3 y Google Gemini API",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^7.1.0",
+    "mammoth": "^1.10.0",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "pdf-parse": "^1.1.1"
+  }
+}

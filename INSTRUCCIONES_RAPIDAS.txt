@@ -1,0 +1,40 @@
+# 🚀 YouTube Niche Lab — Inicio rápido (3 minutos)
+
+## 1. Instalar
+
+```bash
+cd youtube-niche-lab
+npm install
+npm install --prefix backend
+npm install --prefix frontend
+```
+
+## 2. Configurar API keys (opcional — sin keys funciona en modo demo)
+
+```bash
+cp backend/.env.example backend/.env
+# Edita backend/.env y pega tus keys
+```
+
+## 3. Arrancar
+
+```bash
+npm run dev
+```
+
+Abre 👉 http://localhost:5173
+
+## 4. Sin keys
+
+Si no tienes keys, abre la app y dale "Empezar (modo demo)".
+Verás el flujo completo con datos de ejemplo. Cuando estés listo,
+ve a **Ajustes** y pega tus keys.
+
+## 5. ¿Y las keys dónde las consigo?
+
+- **YouTube:** https://console.cloud.google.com/apis/credentials (habilita "YouTube Data API v3")
+- **Gemini:** https://aistudio.google.com/app/apikey (gratis)
+
+---
+
+¿Problemas? Revisa la sección "Problemas comunes" en el README.md.

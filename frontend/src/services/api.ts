@@ -1,7 +1,12 @@
 import { useApp } from '../store/useApp';
 
 // Capa fina sobre fetch. Lanza errores con mensajes en español.
-const BASE = '/api';
+// Si se ejecuta en producción (ej. Netlify), apunta al backend local por defecto
+// a menos que se configure VITE_API_URL durante el build.
+const BASE = import.meta.env.VITE_API_URL || 
+  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+    ? '/api' 
+    : 'http://localhost:4000/api');
 
 function normalizeSecret(value?: string | null) {
   return String(value || '')

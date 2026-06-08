@@ -12,11 +12,15 @@ export function IdeasPage() {
   const { proyecto, setIdea, setVideoPlan, setIdeasGeneradas, settings, backendKeys } = useApp();
 
   // Inicializa con la lista completa guardada; si no hay, y hay una elegida, la incluye como semilla.
-  const listaInicial: VideoIdea[] = proyecto.ideasGeneradas?.length
+  // Mapeamos para garantizar que cada idea tenga un ID válido, evitando fallos en ver estructura.
+  const listaInicial: VideoIdea[] = (proyecto.ideasGeneradas?.length
     ? proyecto.ideasGeneradas
     : proyecto.ideaElegida
       ? [proyecto.ideaElegida]
-      : [];
+      : []).map((idea, i) => ({
+        ...idea,
+        id: idea.id || `idea-${i}-${Math.random().toString(36).slice(2, 6)}`
+      }));
 
   const [ideas, setIdeas] = useState<VideoIdea[]>(listaInicial);
   const [loading, setLoading] = useState(false);
@@ -235,10 +239,22 @@ export function IdeasPage() {
                         <span className="text-slate-500 font-semibold">Métricas:</span> {idea.justificacionMetricas}
                       </p>
                     )}
+                    {idea.desgloseKB && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        <span className="text-slate-500 font-semibold">De tu documentación (KB):</span> {idea.desgloseKB}
+                      </p>
+                    )}
+                    {idea.desgloseInvestigacion && (
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        <span className="text-slate-500 font-semibold">De la investigación (YouTube):</span> {idea.desgloseInvestigacion}
+                      </p>
+                    )}
                     {Array.isArray(idea.fuentes) && idea.fuentes.length > 0 && (
                       <div className="text-xs text-slate-500 flex flex-wrap gap-1 items-center mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                         <span className="font-semibold text-slate-500">Fuentes:</span>
-                        {idea.fuentes.slice(0, 5).map((f, idx) => {
+                        {idea.fuentes.map((fuenteItem, idx) => {
+                          const f = String(fuenteItem || '').trim();
+                          if (!f) return null;
                           let label = f;
                           let isKb = false;
                           if (f.startsWith('[KB:')) {

@@ -73,6 +73,8 @@ export interface VideoIdea {
   justificacionMetricas?: string;
   origen?: 'kb' | 'ai' | 'hibrida';
   fuentes?: string[];
+  desgloseKB?: string;
+  desgloseInvestigacion?: string;
 }
 
 export interface GeneratedAssets {

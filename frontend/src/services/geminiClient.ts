@@ -4,7 +4,7 @@ import type { VideoIdea, GeneratedAssets, MonetizationReport, Niche } from '../t
 import { DEMO_IDEAS, DEMO_ASSETS, DEMO_MONETIZACION } from '../data/demo';
 import { useApp } from '../store/useApp';
 
-const JSON_HINT_IDEAS = `{ideas: [{titulo, hook, angulo, porQueViral, promesaValor, estructuraSugerida, justificacionMetricas, origen, fuentes}]}`;
+const JSON_HINT_IDEAS = `{ideas: [{titulo, hook, angulo, porQueViral, promesaValor, estructuraSugerida, justificacionMetricas, origen, fuentes, desgloseKB, desgloseInvestigacion}]}`;
 const JSON_HINT_ASSETS = `{titulos,guion,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion,fuentesUtilizadas}`;
 
 function withRatio(prompt: string, ratio: '9:16' | '16:9') {
@@ -69,6 +69,8 @@ Requisitos por idea:
 - justificación de métricas (por qué debería subir CTR/retención/VPH)
 - origen: "kb" (si proviene principalmente de tu Base de Conocimiento), "ai" (si es una idea general del nicho surgida de la investigación de YouTube), "hibrida" (si cruza/condensa información de tu KB con la investigación de YouTube).
 - fuentes: array de referencias específicas. Si usas información de tu Base de Conocimiento, DEBES incluir el ID exacto del documento formateado como "[KB:<id>]" (ej. "[KB:doc-id]"). Si usas datos de los videos analizados, outliers o canales de la investigación, incluye el título o canal formateado como "[Investigación: <título o canal>]" (ej. "[Investigación: Outlier - 5 Hábitos]").
+- desgloseKB: explicación breve (1-2 frases) de qué se tomó como importante de la Base de Conocimiento (documentación cargada por el usuario) para construir esta idea y cómo se incorporó (dejar vacío si el origen es "ai" o no se usó ningún documento).
+- desgloseInvestigacion: explicación breve (1-2 frases) de qué se tomó de la investigación de YouTube (outliers, canales analizados, subnichos) para armar y sustentar esta idea.
 
 Contexto del análisis:
 - Resumen: ${opts.investigacion.resumen}
@@ -101,6 +103,8 @@ Devuelve un JSON con esta forma: ${JSON_HINT_IDEAS}`;
     justificacionMetricas: it.justificacionMetricas,
     origen: it.origen,
     fuentes: Array.isArray(it.fuentes) ? it.fuentes : [],
+    desgloseKB: it.desgloseKB || '',
+    desgloseInvestigacion: it.desgloseInvestigacion || '',
   }));
 }
 

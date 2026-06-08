@@ -192,47 +192,55 @@ export function AssetsPage() {
           </div>
 
           {a.fuentesUtilizadas && (a.fuentesUtilizadas.kb?.length > 0 || a.fuentesUtilizadas.investigacion?.length > 0) && (
-            <div className="card p-5 border-l-4 border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20 space-y-4">
-              <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
-                <Layers className="w-5 h-5 text-emerald-500" />
-                Síntesis de fuentes condensadas en estos activos
-              </div>
-              {a.fuentesUtilizadas.explicacion && (
-                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {a.fuentesUtilizadas.explicacion}
-                </p>
-              )}
-              <div className="flex flex-col sm:flex-row gap-4 text-xs">
-                {a.fuentesUtilizadas.kb.length > 0 && (
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">De tu Base de Conocimiento</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {a.fuentesUtilizadas.kb.map((f, idx) => {
-                        const doc = proyecto.knowledgeBase?.find(d => d.id === f);
-                        const label = doc ? doc.name : `Doc: ${f}`;
-                        return (
-                          <span key={idx} className="chip bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-100 dark:border-blue-900/40 max-w-[200px] truncate" title={label}>
-                            {label}
+            <details className="group rounded-2xl border border-emerald-100/80 dark:border-emerald-900/40 overflow-hidden bg-emerald-50/10 dark:bg-emerald-950/5 transition-all shadow-sm">
+              <summary className="cursor-pointer select-none flex items-center justify-between p-4 bg-emerald-50/20 dark:bg-emerald-950/15 hover:bg-emerald-100/20 dark:hover:bg-emerald-950/20 transition-colors">
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                  <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Síntesis de fuentes condensadas</span>
+                  <span className="chip bg-emerald-100/80 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] py-0.5 px-2 rounded-full font-semibold">
+                    {((a.fuentesUtilizadas.kb?.length || 0) + (a.fuentesUtilizadas.investigacion?.length || 0))} fuentes
+                  </span>
+                </div>
+                <ChevronDown className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-open:rotate-180 transition-transform" />
+              </summary>
+              <div className="p-4 md:p-5 bg-white dark:bg-slate-900 border-t border-emerald-100/80 dark:border-emerald-900/40 space-y-4 animate-slide-down">
+                {a.fuentesUtilizadas.explicacion && (
+                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/60 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100/80 dark:border-slate-800/40">
+                    {a.fuentesUtilizadas.explicacion}
+                  </p>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+                  {a.fuentesUtilizadas.kb.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De tu Base de Conocimiento</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {a.fuentesUtilizadas.kb.map((f, idx) => {
+                          const doc = proyecto.knowledgeBase?.find(d => d.id === f);
+                          const label = doc ? doc.name : `Doc: ${f}`;
+                          return (
+                            <span key={idx} className="chip bg-blue-50/80 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border border-blue-100/60 dark:border-blue-900/40 max-w-[240px] truncate" title={label}>
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {a.fuentesUtilizadas.investigacion.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De la Investigación del Nicho</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {a.fuentesUtilizadas.investigacion.map((f, idx) => (
+                          <span key={idx} className="chip bg-purple-50/80 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border border-purple-100/60 dark:border-purple-900/40 max-w-[240px] truncate" title={f}>
+                            {f}
                           </span>
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {a.fuentesUtilizadas.investigacion.length > 0 && (
-                  <div className="flex-1 min-w-0">
-                    <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">De la Investigación del Nicho</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {a.fuentesUtilizadas.investigacion.map((f, idx) => (
-                        <span key={idx} className="chip bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 border-purple-100 dark:border-purple-900/40 max-w-[200px] truncate" title={f}>
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            </details>
           )}
 
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-1">

@@ -3,7 +3,7 @@ import { useApp } from '../store/useApp';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { useNavigate } from 'react-router-dom';
 import {
-  Compass, Search, Lightbulb, Wand2, DollarSign, Download, Sparkles, ArrowRight, FolderOpen, Check,
+  Compass, Search, Lightbulb, Wand2, DollarSign, Download, Sparkles, ArrowRight, FolderOpen, Check, Plus,
 } from 'lucide-react';
 
 const PASOS = [
@@ -16,8 +16,19 @@ const PASOS = [
 ];
 
 export function DashboardPage() {
-  const { proyecto, pasoActual } = useApp();
+  const { proyecto, pasoActual, nuevoProyecto } = useApp();
   const navigate = useNavigate();
+
+  const handleNuevoProyecto = () => {
+    const tieneInfo = Boolean(
+      proyecto.nicho || proyecto.investigacion || proyecto.ideaElegida || proyecto.assets || proyecto.monetizacion
+    );
+    if (tieneInfo && !confirm(
+      'Esto borrará toda la información del proyecto activo (nicho, investigación, ideas, activos, monetización…) y empezará uno completamente nuevo. ¿Continuar?'
+    )) return;
+    nuevoProyecto();
+    navigate('/');
+  };
 
   return (
     <>
@@ -35,11 +46,16 @@ export function DashboardPage() {
             Investiga nichos con datos reales de YouTube, genera ideas, guiones, títulos,
             descripciones SEO y prompts para tus herramientas de creación. Todo en español, paso a paso.
           </p>
-          {proyecto.nicho && (
-            <div className="mt-4 inline-flex items-center gap-2 chip bg-white/50 dark:bg-slate-800/50">
-              <span className="font-semibold">Proyecto activo:</span> {proyecto.nombre} · {proyecto.nicho}
-            </div>
-          )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {proyecto.nicho && (
+              <div className="inline-flex items-center gap-2 chip bg-white/50 dark:bg-slate-800/50">
+                <span className="font-semibold">Proyecto activo:</span> {proyecto.nombre} · {proyecto.nicho}
+              </div>
+            )}
+            <button onClick={handleNuevoProyecto} className="btn-secondary gap-2 text-sm">
+              <Plus className="w-4 h-4" /> Nuevo proyecto
+            </button>
+          </div>
         </div>
 
         {/* Pipeline resumen */}

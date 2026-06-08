@@ -216,7 +216,7 @@ export function ProyectosPage() {
             className="hidden"
             onChange={onPick}
           />
-          <button onClick={() => { nuevoProyecto(); navigate('/nicho'); }} className="btn-primary">
+          <button onClick={() => { nuevoProyecto(); navigate('/'); }} className="btn-primary">
             <Plus className="w-4 h-4" /> Nuevo proyecto
           </button>
         </div>

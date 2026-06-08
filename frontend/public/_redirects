@@ -1,0 +1,4 @@
+# Redirección de Netlify para redirigir las peticiones del frontend al backend de producción
+# Reemplaza 'https://tu-backend-deployado.com' con la URL real de tu backend (en Render, Railway, etc.) cuando lo subas.
+
+/api/*  https://tu-backend-deployado.com/api/:splat  200!

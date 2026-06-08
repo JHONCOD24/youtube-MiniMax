@@ -31,6 +31,8 @@ export function AssetsPage() {
   const [guionEditorOpen, setGuionEditorOpen] = useState(false);
   const [resyncLoading, setResyncLoading] = useState(false);
   const [resyncMsg, setResyncMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [showFuentes, setShowFuentes] = useState(false);
+
 
   const geminiDisponible = settings.proveedorIA === 'claude'
     ? Boolean(settings.claudeKey) || backendKeys.claude
@@ -192,56 +194,91 @@ export function AssetsPage() {
           </div>
 
           {a.fuentesUtilizadas && (a.fuentesUtilizadas.kb?.length > 0 || a.fuentesUtilizadas.investigacion?.length > 0) && (
-            <details className="group rounded-2xl border border-emerald-100/80 dark:border-emerald-900/40 overflow-hidden bg-emerald-50/10 dark:bg-emerald-950/5 transition-all shadow-sm">
-              <summary className="cursor-pointer select-none flex items-center justify-between p-4 bg-emerald-50/20 dark:bg-emerald-950/15 hover:bg-emerald-100/20 dark:hover:bg-emerald-950/20 transition-colors">
-                <div className="flex items-center gap-2 text-sm font-bold text-emerald-800 dark:text-emerald-300">
-                  <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Síntesis de fuentes condensadas</span>
-                  <span className="chip bg-emerald-100/80 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] py-0.5 px-2 rounded-full font-semibold">
-                    {((a.fuentesUtilizadas.kb?.length || 0) + (a.fuentesUtilizadas.investigacion?.length || 0))} fuentes
-                  </span>
+            <div className="rounded-2xl border border-emerald-500/20 dark:border-emerald-500/35 overflow-hidden bg-gradient-to-br from-emerald-50/30 via-teal-50/10 to-emerald-50/20 dark:from-emerald-950/10 dark:via-teal-950/5 dark:to-emerald-950/10 shadow-sm transition-all duration-300">
+              <button 
+                onClick={() => setShowFuentes(!showFuentes)}
+                className="w-full text-left cursor-pointer select-none flex items-center justify-between p-4 hover:bg-emerald-100/10 dark:hover:bg-emerald-950/20 transition-colors"
+              >
+                <div className="flex items-center gap-2.5 text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5">
+                    <span>Síntesis de fuentes condensadas</span>
+                    <span className="chip bg-emerald-100/80 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-[10px] py-0.5 px-2.5 rounded-full font-semibold border-emerald-200 dark:border-emerald-800 self-start sm:self-auto">
+                      {((a.fuentesUtilizadas.kb?.length || 0) + (a.fuentesUtilizadas.investigacion?.length || 0))} fuentes
+                    </span>
+                  </div>
                 </div>
-                <ChevronDown className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-open:rotate-180 transition-transform" />
-              </summary>
-              <div className="p-4 md:p-5 bg-white dark:bg-slate-900 border-t border-emerald-100/80 dark:border-emerald-900/40 space-y-4 animate-slide-down">
-                {a.fuentesUtilizadas.explicacion && (
-                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/60 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100/80 dark:border-slate-800/40">
-                    {a.fuentesUtilizadas.explicacion}
-                  </p>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
-                  {a.fuentesUtilizadas.kb.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De tu Base de Conocimiento</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {a.fuentesUtilizadas.kb.map((f, idx) => {
-                          const doc = proyecto.knowledgeBase?.find(d => d.id === f);
-                          const label = doc ? doc.name : `Doc: ${f}`;
-                          return (
-                            <span key={idx} className="chip bg-blue-50/80 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border border-blue-100/60 dark:border-blue-900/40 max-w-[240px] truncate" title={label}>
-                              {label}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">
+                    {showFuentes ? 'Ocultar' : 'Ver detalle'}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-emerald-600 dark:text-emerald-400 transition-transform duration-300 ${showFuentes ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+              
+              <div 
+                className={`transition-all duration-300 ease-in-out ${
+                  showFuentes ? 'max-h-[1000px] opacity-100 border-t border-emerald-500/10 dark:border-emerald-500/20' : 'max-h-0 opacity-0 overflow-hidden'
+                }`}
+              >
+                <div className="p-4 md:p-5 bg-white dark:bg-slate-900 space-y-4">
+                  {a.fuentesUtilizadas.explicacion && (
+                    <div className="flex gap-3 text-sm text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50/60 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800/40">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center text-emerald-700 dark:text-emerald-300 text-xs shrink-0 mt-0.5">
+                        💡
+                      </div>
+                      <p>{a.fuentesUtilizadas.explicacion}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+                    {a.fuentesUtilizadas.kb.length > 0 && (
+                      <div className="space-y-2.5">
+                        <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De tu Base de Conocimiento</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {a.fuentesUtilizadas.kb.map((f, idx) => {
+                            const doc = proyecto.knowledgeBase?.find(d => d.id === f);
+                            const label = doc ? doc.name : `Doc: ${f}`;
+                            return (
+                              <span 
+                                key={idx} 
+                                onClick={() => copyToClipboard(label)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 border border-blue-100/60 dark:border-blue-900/40 max-w-full truncate hover:bg-blue-100/40 dark:hover:bg-blue-900/30 cursor-pointer select-none transition-colors" 
+                                title="Click para copiar el nombre"
+                              >
+                                <FileText className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">{label}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {a.fuentesUtilizadas.investigacion.length > 0 && (
+                      <div className="space-y-2.5">
+                        <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De la Investigación del Nicho</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {a.fuentesUtilizadas.investigacion.map((f, idx) => (
+                            <span 
+                              key={idx} 
+                              onClick={() => copyToClipboard(f)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-50/80 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border border-purple-100/60 dark:border-purple-900/40 max-w-full truncate hover:bg-purple-100/40 dark:hover:bg-purple-900/30 cursor-pointer select-none transition-colors" 
+                              title="Click para copiar la búsqueda"
+                            >
+                              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                              <span className="truncate">{f}</span>
                             </span>
-                          );
-                        })}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {a.fuentesUtilizadas.investigacion.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block text-[10px]">De la Investigación del Nicho</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {a.fuentesUtilizadas.investigacion.map((f, idx) => (
-                          <span key={idx} className="chip bg-purple-50/80 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 border border-purple-100/60 dark:border-purple-900/40 max-w-[240px] truncate" title={f}>
-                            {f}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
-            </details>
+            </div>
           )}
+
 
           <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 px-1">
             <ActiveTabIcon className="w-4 h-4 text-brand-500" />

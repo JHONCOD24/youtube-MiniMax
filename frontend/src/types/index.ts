@@ -198,3 +198,12 @@ export interface AppSettings {
   proveedorIA: 'gemini' | 'claude' | 'mistral';
   onVisitou: boolean;
 }
+
+export interface PlanItem {
+  id: string;
+  titulo: string;
+  fecha: string;
+  estado: 'idea' | 'guion' | 'grabado' | 'publicado';
+  nicho?: string;
+}
+

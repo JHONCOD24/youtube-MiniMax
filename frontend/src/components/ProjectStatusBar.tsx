@@ -17,16 +17,20 @@ function pasosCompletados(p: Project): number {
 
 export function ProjectStatusBar() {
   const proyecto = useApp((s) => s.proyecto);
-  const guardarComoNuevo = useApp((s) => s.guardarComoNuevo);
+  const proyectos = useApp((s) => s.proyectos);
+  const guardarProyecto = useApp((s) => s.guardarProyecto);
   const [saved, setSaved] = useState(false);
   const completados = pasosCompletados(proyecto);
 
   // El nombre que se usará al guardar: la idea elegida tiene prioridad
   const nombreDestino = proyecto.ideaElegida?.titulo?.trim() || proyecto.nombre;
+  const existente = proyectos.find((p) => p.id === proyecto.id);
+  // Solo se creará un proyecto nuevo si ya existía uno guardado con otra idea/nombre.
+  const creará = Boolean(existente) && nombreDestino !== existente!.nombre;
   const renombrará = nombreDestino !== proyecto.nombre;
 
   const handleSave = () => {
-    guardarComoNuevo(nombreDestino);
+    guardarProyecto();
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -84,7 +88,9 @@ export function ProjectStatusBar() {
               ? 'bg-green-500 text-white'
               : 'bg-brand-600 hover:bg-brand-700 text-white'
           }`}
-          title={`Crea una copia nueva en Proyectos con el nombre: "${nombreDestino}"`}
+          title={creará
+            ? `Crea un proyecto nuevo en Proyectos con el nombre: "${nombreDestino}"`
+            : `Actualiza el proyecto guardado: "${nombreDestino}"`}
         >
           {saved ? (
             <><Check className="w-3.5 h-3.5" /> Guardado</>

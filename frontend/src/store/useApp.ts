@@ -31,8 +31,7 @@ interface State {
   duplicarProyecto: (id: string) => void;
   proyectos: Project[];
   cargarProyectos: () => void;
-  guardar: () => void;
-  guardarComoNuevo: (nombre: string) => void;
+  guardarProyecto: () => void;
   updateSettings: (s: Partial<AppSettings>) => void;
   toggleTema: () => void;
   temaOscuro: boolean;
@@ -207,28 +206,30 @@ const store = create<State>((set, get) => ({
     set({ proyectos: load<Project[]>(KEYS.proyectos, []) });
   },
 
-  guardar: () => {
+  guardarProyecto: () => {
     const { proyecto, proyectos } = get();
-    save(KEYS.proyectoActivo, proyecto);
-    const idx = proyectos.findIndex((p) => p.id === proyecto.id);
-    const nuevos = idx >= 0 ? [...proyectos.slice(0, idx), proyecto, ...proyectos.slice(idx + 1)] : [...proyectos, proyecto];
-    save(KEYS.proyectos, nuevos);
-    set({ proyectos: nuevos });
-  },
+    const ahora = new Date().toISOString();
+    // La idea elegida define el nombre destino; si no hay idea, se mantiene el nombre actual.
+    const nombreDestino = proyecto.ideaElegida?.titulo?.trim() || proyecto.nombre;
+    const existente = proyectos.find((p) => p.id === proyecto.id);
 
-  guardarComoNuevo: (nombre) => {
-    const { proyecto, proyectos } = get();
-    // Crea una copia completamente nueva con ID propio — no sobreescribe ningún proyecto existente.
-    const copia: Project = {
-      ...proyecto,
-      id: uid(),
-      nombre: nombre.trim() || proyecto.nombre,
-      fechaCreacion: new Date().toISOString(),
-      fechaModificacion: new Date().toISOString(),
-    };
-    const nuevos = [...proyectos, copia];
+    let actualizado: Project;
+    let nuevos: Project[];
+    if (!existente || nombreDestino === existente.nombre) {
+      // Primer guardado de este proyecto, o se guarda de nuevo sobre la misma idea: actualiza en su lugar.
+      actualizado = { ...proyecto, nombre: nombreDestino, fechaModificacion: ahora };
+      nuevos = existente
+        ? proyectos.map((p) => (p.id === actualizado.id ? actualizado : p))
+        : [...proyectos, actualizado];
+    } else {
+      // Se eligió una idea distinta a la del último guardado: crea un proyecto nuevo aparte.
+      actualizado = { ...proyecto, id: uid(), nombre: nombreDestino, fechaCreacion: ahora, fechaModificacion: ahora };
+      nuevos = [...proyectos, actualizado];
+    }
+
+    save(KEYS.proyectoActivo, actualizado);
     save(KEYS.proyectos, nuevos);
-    set({ proyectos: nuevos });
+    set({ proyecto: actualizado, proyectos: nuevos });
   },
 
   updateSettings: (s) => {

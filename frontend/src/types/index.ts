@@ -150,6 +150,7 @@ export interface VideoPlan {
 
 export interface MonetizationReport {
   nicho: string;
+  ideaId?: string; // id de la idea elegida usada para generar este reporte
   rpm: [number, number];
   cpm: [number, number];
   vias: { nombre: string; descripcion: string; potencial: 'bajo' | 'medio' | 'alto' }[];

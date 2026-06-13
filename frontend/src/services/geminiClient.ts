@@ -515,14 +515,19 @@ Responde en español salvo los prompts (que van en inglés para mejor calidad).`
 export async function generarMonetizacion(opts: {
   nicho: Niche | null;
   nichoNombre: string;
+  idea?: VideoIdea | null;
   geminiDisponible: boolean;
 }): Promise<MonetizationReport> {
   if (!opts.geminiDisponible) {
-    return { ...DEMO_MONETIZACION, nicho: opts.nichoNombre };
+    return { ...DEMO_MONETIZACION, nicho: opts.nichoNombre, ideaId: opts.idea?.id };
   }
 
   const cpmSugerido = opts.nicho?.cpm || [2, 10];
+  const contextoIdea = opts.idea
+    ? `\nEl video específico a monetizar es: "${opts.idea.titulo}". Hook: "${opts.idea.hook}". Ángulo: "${opts.idea.angulo}". Ajusta las vías de monetización, la proyección de ingresos y sus descripciones a este video concreto, no solo al nicho en general.\n`
+    : '';
   const prompt = `Genera un plan de monetización para un canal de YouTube del nicho "${opts.nichoNombre}".
+${contextoIdea}
 
 Devuelve un JSON con:
 {
@@ -566,6 +571,7 @@ Sugerencia base: CPM referencial del nicho es [${cpmSugerido[0]}, ${cpmSugerido[
 
   return {
     nicho: opts.nichoNombre,
+    ideaId: opts.idea?.id,
     rpm: data.rpm || [1, 3],
     cpm: data.cpm || cpmSugerido,
     vias: data.vias || [],

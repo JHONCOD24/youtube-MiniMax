@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useApp } from '../store/useApp';
 import { generarMonetizacion } from '../services/geminiClient';
 import { NICHOS } from '../data/niches';
-import { DollarSign, Loader2, CheckCircle2, Circle } from 'lucide-react';
+import { DollarSign, Loader2, CheckCircle2, Circle, RefreshCw, AlertTriangle } from 'lucide-react';
 import { formatNumber } from '../utils/format';
 
 export function MonetizacionPage() {
@@ -18,6 +18,8 @@ export function MonetizacionPage() {
     : Boolean(settings.geminiKey) || backendKeys.gemini;
   const m = proyecto.monetizacion;
   const nichoObj = NICHOS.find((n) => n.nombre === proyecto.nicho) || null;
+  // Si la idea elegida cambió desde que se calculó la monetización, los datos quedaron desactualizados.
+  const desactualizado = Boolean(m && proyecto.ideaElegida && m.ideaId !== proyecto.ideaElegida.id);
 
   const generar = async () => {
     setError(''); setLoading(true);
@@ -25,6 +27,7 @@ export function MonetizacionPage() {
       const data = await generarMonetizacion({
         nicho: nichoObj,
         nichoNombre: proyecto.nicho,
+        idea: proyecto.ideaElegida,
         geminiDisponible,
       });
       setMonetizacion(data);
@@ -40,10 +43,29 @@ export function MonetizacionPage() {
           <h1 className="text-2xl md:text-3xl font-bold mb-2">Paso 5 · Monetización</h1>
           <p className="text-slate-600 dark:text-slate-300">Nicho: <b>{proyecto.nicho}</b></p>
         </div>
-        <button onClick={generar} disabled={loading} className="btn-primary">
-          {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</> : <><DollarSign className="w-4 h-4" /> {m ? 'Recalcular' : 'Calcular monetización'}</>}
+        <button
+          onClick={generar}
+          disabled={loading}
+          className={desactualizado ? 'btn-primary !bg-amber-500 hover:!bg-amber-600' : 'btn-primary'}
+        >
+          {loading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Calculando…</>
+          ) : desactualizado ? (
+            <><RefreshCw className="w-4 h-4" /> Regenerar monetización</>
+          ) : m ? (
+            <><RefreshCw className="w-4 h-4" /> Recalcular</>
+          ) : (
+            <><DollarSign className="w-4 h-4" /> Calcular monetización</>
+          )}
         </button>
       </header>
+
+      {desactualizado && !loading && (
+        <div className="card p-4 border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-900/20 text-sm text-amber-800 dark:text-amber-200 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          Cambiaste la idea elegida. Estos datos corresponden a una idea anterior, presiona "Regenerar monetización" para actualizarlos.
+        </div>
+      )}
 
       {error && <div className="card p-4 border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-200">{error}</div>}
 

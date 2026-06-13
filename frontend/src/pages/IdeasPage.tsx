@@ -1,7 +1,7 @@
 // Paso 3: Ideas de video.
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
-import { generarIdeas } from '../services/geminiClient';
+import { generarIdeas, normalizeIdea } from '../services/geminiClient';
 import { Lightbulb, Loader2, Check, ArrowRight, BookOpen, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { kbBuildContext } from '../services/kbClient';
@@ -12,13 +12,14 @@ export function IdeasPage() {
   const { proyecto, setIdea, setVideoPlan, setIdeasGeneradas, settings, backendKeys } = useApp();
 
   // Inicializa con la lista completa guardada; si no hay, y hay una elegida, la incluye como semilla.
-  // Mapeamos para garantizar que cada idea tenga un ID válido, evitando fallos en ver estructura.
+  // Se normaliza cada idea (puede venir de un proyecto guardado con una versión
+  // anterior y traer campos con forma inesperada) para que esta pestaña nunca falle.
   const listaInicial: VideoIdea[] = (proyecto.ideasGeneradas?.length
     ? proyecto.ideasGeneradas
     : proyecto.ideaElegida
       ? [proyecto.ideaElegida]
       : []).map((idea, i) => ({
-        ...idea,
+        ...normalizeIdea(idea, i),
         id: idea.id || `idea-${i}-${Math.random().toString(36).slice(2, 6)}`
       }));
 

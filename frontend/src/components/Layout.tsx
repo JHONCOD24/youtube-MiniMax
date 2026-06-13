@@ -37,21 +37,24 @@ function ProviderToggle() {
         <button
           onClick={() => updateSettings({ proveedorIA: 'gemini' })}
           title="Google Gemini"
-          className={`px-1 py-1 rounded text-center font-semibold transition-all ${proveedorIA === 'gemini' ? 'bg-blue-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+          aria-pressed={proveedorIA === 'gemini'}
+          className={`px-2 py-1.5 rounded text-center font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500 ${proveedorIA === 'gemini' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'}`}
         >
           Gemini
         </button>
         <button
           onClick={() => updateSettings({ proveedorIA: 'claude' })}
           title="Anthropic Claude"
-          className={`px-1 py-1 rounded text-center font-semibold transition-all ${proveedorIA === 'claude' ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+          aria-pressed={proveedorIA === 'claude'}
+          className={`px-2 py-1.5 rounded text-center font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-orange-600 ${proveedorIA === 'claude' ? 'bg-orange-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'}`}
         >
           Claude
         </button>
         <button
           onClick={() => updateSettings({ proveedorIA: 'mistral' })}
           title="Mistral AI"
-          className={`px-1 py-1 rounded text-center font-semibold transition-all ${proveedorIA === 'mistral' ? 'bg-purple-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+          aria-pressed={proveedorIA === 'mistral'}
+          className={`px-2 py-1.5 rounded text-center font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-purple-600 ${proveedorIA === 'mistral' ? 'bg-purple-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800'}`}
         >
           Mistral
         </button>

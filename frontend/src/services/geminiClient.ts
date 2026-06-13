@@ -92,20 +92,7 @@ Devuelve un JSON con esta forma: ${JSON_HINT_IDEAS}`;
   } else {
     data = await api.geminiJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloGemini);
   }
-  return (data.ideas || []).slice(0, 10).map((it: any, i: number) => ({
-    id: `idea-${i}`,
-    titulo: it.titulo,
-    hook: it.hook,
-    angulo: it.angulo,
-    porQueViral: it.porQueViral,
-    promesaValor: it.promesaValor,
-    estructuraSugerida: Array.isArray(it.estructuraSugerida) ? it.estructuraSugerida : [],
-    justificacionMetricas: it.justificacionMetricas,
-    origen: it.origen,
-    fuentes: Array.isArray(it.fuentes) ? it.fuentes : [],
-    desgloseKB: it.desgloseKB || '',
-    desgloseInvestigacion: it.desgloseInvestigacion || '',
-  }));
+  return (data.ideas || []).slice(0, 10).map((it: any, i: number) => normalizeIdea(it, i));
 }
 
 export async function generarAssets(opts: {
@@ -290,6 +277,29 @@ function toStringArray(v: any): string[] {
   if (Array.isArray(v)) return v.map((x) => toText(x, '')).filter(Boolean);
   if (typeof v === 'string') return v.split(/\r?\n|,/).map((s) => s.trim()).filter(Boolean);
   return [];
+}
+
+// Normaliza una idea de video (recién generada por la IA o leída de un proyecto
+// guardado con una versión anterior), garantizando que cada campo tenga el tipo
+// que espera la UI para que la pestaña de Ideas nunca falle con
+// "Objects are not valid as a React child".
+export function normalizeIdea(it: any, i = 0): VideoIdea {
+  const src = it || {};
+  const origenTexto = toText(src.origen, '');
+  return {
+    id: src.id || `idea-${i}`,
+    titulo: toText(src.titulo, `Idea ${i + 1}`),
+    hook: toText(src.hook, ''),
+    angulo: toText(src.angulo, ''),
+    porQueViral: toText(src.porQueViral, ''),
+    promesaValor: toCopyText(src.promesaValor),
+    estructuraSugerida: toStringArray(src.estructuraSugerida),
+    justificacionMetricas: toCopyText(src.justificacionMetricas),
+    origen: (['kb', 'ai', 'hibrida'] as const).includes(origenTexto as any) ? (origenTexto as 'kb' | 'ai' | 'hibrida') : undefined,
+    fuentes: toStringArray(src.fuentes),
+    desgloseKB: toCopyText(src.desgloseKB),
+    desgloseInvestigacion: toCopyText(src.desgloseInvestigacion),
+  };
 }
 
 export function normalizeFuentes(f: any): GeneratedAssets['fuentesUtilizadas'] {

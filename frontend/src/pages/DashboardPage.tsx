@@ -1,9 +1,10 @@
 // Página de inicio / dashboard.
+import { useState } from 'react';
 import { useApp } from '../store/useApp';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { useNavigate } from 'react-router-dom';
 import {
-  Compass, Search, Lightbulb, Wand2, DollarSign, Download, Sparkles, ArrowRight, FolderOpen, Check, Plus,
+  Compass, Search, Lightbulb, Wand2, DollarSign, Download, Sparkles, ArrowRight, FolderOpen, Check, Plus, AlertTriangle,
 } from 'lucide-react';
 
 const PASOS = [
@@ -18,14 +19,23 @@ const PASOS = [
 export function DashboardPage() {
   const { proyecto, pasoActual, nuevoProyecto } = useApp();
   const navigate = useNavigate();
+  const [confirmNuevo, setConfirmNuevo] = useState(false);
+
+  const tieneInfo = Boolean(
+    proyecto.nicho || proyecto.investigacion || proyecto.ideaElegida || proyecto.assets || proyecto.monetizacion
+  );
 
   const handleNuevoProyecto = () => {
-    const tieneInfo = Boolean(
-      proyecto.nicho || proyecto.investigacion || proyecto.ideaElegida || proyecto.assets || proyecto.monetizacion
-    );
-    if (tieneInfo && !confirm(
-      'Esto borrará toda la información del proyecto activo (nicho, investigación, ideas, activos, monetización…) y empezará uno completamente nuevo. ¿Continuar?'
-    )) return;
+    if (tieneInfo) {
+      setConfirmNuevo(true);
+      return;
+    }
+    nuevoProyecto();
+    navigate('/');
+  };
+
+  const confirmarNuevoProyecto = () => {
+    setConfirmNuevo(false);
     nuevoProyecto();
     navigate('/');
   };
@@ -52,10 +62,29 @@ export function DashboardPage() {
                 <span className="font-semibold">Proyecto activo:</span> {proyecto.nombre} · {proyecto.nicho}
               </div>
             )}
-            <button onClick={handleNuevoProyecto} className="btn-secondary gap-2 text-sm">
-              <Plus className="w-4 h-4" /> Nuevo proyecto
-            </button>
+            {!confirmNuevo && (
+              <button onClick={handleNuevoProyecto} className="btn-secondary gap-2 text-sm">
+                <Plus className="w-4 h-4" /> Nuevo proyecto
+              </button>
+            )}
           </div>
+
+          {confirmNuevo && (
+            <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-3">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200 flex-1">
+                Esto borrará toda la información del proyecto activo (nicho, investigación, ideas, activos, monetización…) y empezará uno completamente nuevo.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={() => setConfirmNuevo(false)} className="btn-secondary text-xs py-1.5 px-2.5">
+                  Cancelar
+                </button>
+                <button onClick={confirmarNuevoProyecto} className="btn-primary !bg-amber-600 hover:!bg-amber-700 text-xs py-1.5 px-2.5">
+                  Sí, crear nuevo proyecto
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pipeline resumen */}

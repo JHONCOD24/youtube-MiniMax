@@ -157,6 +157,7 @@ export function ProyectosPage() {
   const [dragOver, setDragOver] = useState(false);
   const [importStatus, setImportStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | File[]) {
     const arr = Array.from(files);
@@ -286,29 +287,48 @@ export function ProyectosPage() {
               </div>
 
               {/* Acciones */}
-              <div className="flex gap-2 pt-1 mt-auto">
-                <button
-                  onClick={() => { cargarProyecto(p.id); navigate('/nicho'); }}
-                  className="btn-primary text-xs flex-1 py-2"
-                >
-                  Abrir
-                </button>
-                <DownloadMenu proyecto={p} />
-                <button
-                  onClick={() => duplicarProyecto(p.id)}
-                  className="btn-secondary p-2"
-                  title="Duplicar"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => { if (confirm(`¿Eliminar "${p.nombre}"?`)) eliminarProyecto(p.id); }}
-                  className="btn-secondary p-2 hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-900/30"
-                  title="Eliminar"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              {confirmDeleteId === p.id ? (
+                <div className="flex items-center gap-2 pt-1 mt-auto rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <p className="text-xs text-red-700 dark:text-red-300 flex-1">¿Eliminar este proyecto?</p>
+                  <button
+                    onClick={() => setConfirmDeleteId(null)}
+                    className="btn-secondary text-xs py-1.5 px-2.5"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => { eliminarProyecto(p.id); setConfirmDeleteId(null); }}
+                    className="btn-primary !bg-red-600 hover:!bg-red-700 text-xs py-1.5 px-2.5"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2 pt-1 mt-auto">
+                  <button
+                    onClick={() => { cargarProyecto(p.id); navigate('/nicho'); }}
+                    className="btn-primary text-xs flex-1 py-2"
+                  >
+                    Abrir
+                  </button>
+                  <DownloadMenu proyecto={p} />
+                  <button
+                    onClick={() => duplicarProyecto(p.id)}
+                    className="btn-secondary p-2"
+                    title="Duplicar"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteId(p.id)}
+                    className="btn-secondary p-2 hover:!bg-red-50 hover:!text-red-600 dark:hover:!bg-red-900/30"
+                    title="Eliminar"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

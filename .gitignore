@@ -6,3 +6,5 @@ dist
 *.log
 .vscode
 .idea
+*.tsbuildinfo
+vite.config.*.timestamp-*.mjs

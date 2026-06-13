@@ -2,8 +2,17 @@
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
 import { NICHOS } from '../data/niches';
-import * as Icons from 'lucide-react';
-import { Search, Sparkles, BookOpen, Upload, Trash2, Loader2 } from 'lucide-react';
+import {
+  Search, Sparkles, BookOpen, Upload, Trash2, Loader2, Plus, Circle,
+  Baby, ChefHat, Cpu, Flame, Ghost, HeartPulse, PawPrint, Plane, Star, TrendingUp, Waves,
+} from 'lucide-react';
+
+// Mapa de los iconos usados por los nichos en data/niches.ts. Se importan de forma
+// explícita (en vez de `import * as Icons`) para no incluir toda la librería de
+// iconos (~750kB) en el chunk de esta página.
+const NICHO_ICONS: Record<string, typeof Circle> = {
+  Baby, BookOpen, ChefHat, Cpu, Flame, Ghost, HeartPulse, PawPrint, Plane, Search, Sparkles, Star, TrendingUp, Waves,
+};
 import { useNavigate } from 'react-router-dom';
 import { kbIngestFiles, kbIngestText } from '../services/kbClient';
 import { kbDelete } from '../services/kbDb';
@@ -93,7 +102,7 @@ export function NichoPage() {
               className="btn-secondary"
               disabled={kbLoading}
             >
-              <Icons.Plus className="w-4 h-4" /> Pegar texto
+              <Plus className="w-4 h-4" /> Pegar texto
             </button>
 
             <label className="btn-secondary cursor-pointer">
@@ -217,7 +226,7 @@ export function NichoPage() {
       {/* Cuadrícula */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtrados.map((n) => {
-          const Icon = (Icons as any)[n.icono] || Icons.Circle;
+          const Icon = NICHO_ICONS[n.icono] || Circle;
           return (
             <button
               key={n.id}

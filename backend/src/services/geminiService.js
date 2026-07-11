@@ -2,8 +2,8 @@
 // Por defecto usa gemini-2.5-flash (rápido y generoso en free tier).
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
-const DEFAULT_MODEL = 'gemini-2.5-flash';
-const FLASH_LITE = 'gemini-2.5-flash-lite';
+const DEFAULT_MODEL = 'gemini-1.5-flash';
+const FLASH_LITE = 'gemini-1.5-flash-8b';
 
 function resolveGeminiKey(clientKey = null) {
   const key = String(clientKey || process.env.GEMINI_API_KEY || '')

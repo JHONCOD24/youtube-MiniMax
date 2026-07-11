@@ -98,7 +98,7 @@ async function request(path: string, body?: any, method: 'GET' | 'POST' = 'POST'
       }
       const base = data?.error || (rawText && rawText.length < 200 ? rawText : `Error ${res.status}`);
       if (data?.detail) {
-        return `${base}\n\nRespuesta recibida:\n${String(data.detail).slice(0, 400)}`;
+        return `${base}\n\nRespuesta recibida:\n${data.detail.slice(0, 2000)}`;
       }
       return base;
     })();

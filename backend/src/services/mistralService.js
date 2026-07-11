@@ -1,5 +1,7 @@
 // Servicio de Mistral AI: encapsula la API con reintentos y backoff.
 // Por defecto usa mistral-large-latest (el modelo de propósito general más potente de Mistral).
+import { parseModelJson } from './jsonParse.js';
+
 const BASE_URL = 'https://api.mistral.ai/v1/chat/completions';
 const DEFAULT_MODEL = 'mistral-large-latest';
 
@@ -131,65 +133,10 @@ export async function generateJSON({ prompt, system, temperature = 0.7, model, s
     responseFormat: true,
   }, clientKey);
 
-  // Limpiar el JSON si viene envuelto en markdown
-  let cleaned = raw
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/, '')
-    .trim();
-
-  // --- Estrategia multi-capa para extraer JSON ---
-  try { return JSON.parse(cleaned); } catch (_) { /* sigue */ }
-
-  function extractBalanced(text, open, close) {
-    let start = -1;
-    let depth = 0;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (c === open) {
-        if (depth === 0) start = i;
-        depth++;
-      } else if (c === close) {
-        depth--;
-        if (depth === 0 && start >= 0) {
-          const candidate = text.slice(start, i + 1);
-          try { return JSON.parse(candidate); } catch (_) { /* sigue */ }
-          try { return JSON.parse(repairJson(candidate)); } catch (_) { /* sigue */ }
-          start = -1;
-        }
-      }
-    }
-    return undefined;
+  try {
+    return parseModelJson(raw, { preferredArrayKeys: ['ideas', 'titulos', 'vias', 'storyboard', 'thumbnails'] });
+  } catch (err) {
+    err.message = (err.message || '').replace('la IA', 'Mistral') || 'No se pudo parsear el JSON devuelto por Mistral.';
+    throw err;
   }
-
-  const result = extractBalanced(cleaned, '{', '}') || extractBalanced(cleaned, '[', ']');
-  if (result) return result;
-
-  const bracesMatch = cleaned.match(/(\{[\s\S]*\})/);
-  if (bracesMatch) {
-    try { return JSON.parse(bracesMatch[1]); } catch (_) { /* sigue */ }
-    try { return JSON.parse(repairJson(bracesMatch[1])); } catch (_) { /* sigue */ }
-  }
-
-  const bracketsMatch = cleaned.match(/(\[[\s\S]*\])/);
-  if (bracketsMatch) {
-    try { return JSON.parse(bracketsMatch[1]); } catch (_) { /* sigue */ }
-    try { return JSON.parse(repairJson(bracketsMatch[1])); } catch (_) { /* sigue */ }
-  }
-
-  const err = new Error('No se pudo parsear el JSON devuelto por Mistral.');
-  err.status = 502;
-  err.detail = raw.slice(0, 800);
-  err.rawLength = raw.length;
-  throw err;
-}
-
-function repairJson(text) {
-  let s = text;
-  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
-  s = s.replace(/(^|[^:])\/\/.*$/gm, '$1');
-  s = s.replace(/[“”«»]/g, '"').replace(/[‘’´`]/g, "'");
-  s = s.replace(/,(\s*[}\]])/g, '$1');
-  return s.trim();
 }

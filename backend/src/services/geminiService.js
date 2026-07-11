@@ -1,9 +1,11 @@
 // Servicio de Gemini: encapsula la API con reintentos y backoff.
-// Por defecto usa gemini-2.5-flash (rápido y generoso en free tier).
+// Por defecto usa gemini-2.5-flash (alineado con el frontend).
+import { parseModelJson } from './jsonParse.js';
+
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
-const DEFAULT_MODEL = 'gemini-1.5-flash';
-const FLASH_LITE = 'gemini-1.5-flash-8b';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
+const FLASH_LITE = 'gemini-2.5-flash-lite';
 
 function resolveGeminiKey(clientKey = null) {
   const key = String(clientKey || process.env.GEMINI_API_KEY || '')
@@ -26,6 +28,10 @@ function buildUrl(model, clientKey = null) {
   return `${BASE_URL}/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
 }
 
+/**
+ * Llama a Gemini y devuelve { text, finishReason, truncated }.
+ * truncated=true cuando el modelo cortó por MAX_TOKENS u otro límite.
+ */
 async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, systemInstruction }, clientKey = null) {
   const body = {
     contents,
@@ -51,7 +57,6 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
         body: JSON.stringify(body),
       });
     } catch (e) {
-      // No tragarse errores con status propio (p. ej. 503 de key faltante).
       if (e && e.status) throw e;
       lastError = new Error('No se pudo conectar con Gemini. Revisa tu conexión.');
       lastError.status = 502;
@@ -59,13 +64,20 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
 
     if (res && res.ok) {
       const data = await res.json();
-      const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+      const candidate = data?.candidates?.[0];
+      const text = candidate?.content?.parts?.map((p) => p.text || '').join('') || '';
+      const finishReason = candidate?.finishReason || data?.promptFeedback?.blockReason || '';
       if (!text) {
-        const err = new Error('Gemini devolvió una respuesta vacía.');
+        const err = new Error(
+          finishReason
+            ? `Gemini devolvió una respuesta vacía (${finishReason}).`
+            : 'Gemini devolvió una respuesta vacía.',
+        );
         err.status = 502;
         throw err;
       }
-      return text;
+      const truncated = /MAX_TOKENS|LENGTH/i.test(String(finishReason));
+      return { text, finishReason, truncated };
     }
 
     if (res) {
@@ -97,123 +109,56 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
 
 // --- API pública ---
 export async function generateText({ prompt, system, temperature = 0.8, model }, clientKey = null) {
-  return callGemini({
+  const { text } = await callGemini({
     model: model || DEFAULT_MODEL,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature },
+    generationConfig: { temperature, maxOutputTokens: 8192 },
     systemInstruction: system,
   }, clientKey);
+  return text;
 }
 
 export async function generateJSON({ prompt, system, temperature = 0.7, model, schemaHint }, clientKey = null) {
   const fullSystem = [
     system || '',
-    'INSTRUCCIÓN ESTRICTA DE FORMATO: Tu respuesta debe ser EXCLUSIVAMENTE un objeto JSON válido.',
+    'INSTRUCCIÓN ESTRICTA DE FORMATO: Tu respuesta debe ser EXCLUSIVAMENTE un objeto JSON válido y COMPLETO.',
     'No escribas prosa, no uses bloques de código ```, no agregues explicaciones antes ni después.',
     'No incluyas comentarios // ni /* */. No uses comillas tipográficas (“ ” ‘ ’).',
     'No pongas comas trailing antes de } o ].',
+    'Sé CONCISO en cada campo de texto (máx. 1-2 frases cortas) para no truncar el JSON.',
     'Empieza tu respuesta con el primer caracter del JSON ( { o [ ) y termina con el último ( } o ] ).',
     schemaHint ? `Esquema esperado: ${schemaHint}` : '',
   ].filter(Boolean).join('\n');
 
-  console.log(`[GEMINI generateJSON] Calling model=${model || DEFAULT_MODEL}. Prompt len: ${prompt.length}, System instruction len: ${fullSystem.length}`);
+  const usedModel = model || DEFAULT_MODEL;
+  console.log(`[GEMINI generateJSON] model=${usedModel}. Prompt len: ${prompt.length}`);
 
-  const raw = await callGemini({
-    model: model || DEFAULT_MODEL,
+  // 8192 a menudo corta packs grandes (10 ideas, assets…). 32k da margen en 2.5-flash.
+  const { text: raw, truncated, finishReason } = await callGemini({
+    model: usedModel,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature, responseMimeType: 'application/json', maxOutputTokens: 8192 },
+    generationConfig: {
+      temperature,
+      responseMimeType: 'application/json',
+      maxOutputTokens: 32768,
+    },
     systemInstruction: fullSystem,
   }, clientKey);
 
-  console.log(`[GEMINI generateJSON] Received raw length: ${raw.length}`);
+  console.log(`[GEMINI generateJSON] raw len=${raw.length} finishReason=${finishReason || '—'} truncated=${!!truncated}`);
 
-  // Limpiar el JSON si viene envuelto en markdown
-  let cleaned = raw
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/, '')
-    .trim();
-
-  // --- Estrategia multi-capa para extraer JSON ---
   try {
-    const parsed = JSON.parse(cleaned);
-    console.log(`[GEMINI generateJSON] Direct parse successful. Keys: ${Object.keys(parsed).join(', ')}`);
-    return parsed;
-  } catch (_) {
-    console.log('[GEMINI generateJSON] Direct parse failed, trying alternative methods...');
-  }
-
-  function extractBalanced(text, open, close) {
-    let start = -1;
-    let depth = 0;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (c === open) {
-        if (depth === 0) start = i;
-        depth++;
-      } else if (c === close) {
-        depth--;
-        if (depth === 0 && start >= 0) {
-          const candidate = text.slice(start, i + 1);
-          try { return JSON.parse(candidate); } catch (_) { /* sigue */ }
-          try { return JSON.parse(repairJson(candidate)); } catch (_) { /* sigue */ }
-          start = -1;
-        }
-      }
+    const parsed = parseModelJson(raw, { preferredArrayKeys: ['ideas', 'titulos', 'vias', 'storyboard', 'thumbnails'] });
+    if (truncated) {
+      console.warn('[GEMINI generateJSON] Respuesta truncada por tokens; se recuperó JSON parcial usable.');
     }
-    return undefined;
+    return parsed;
+  } catch (err) {
+    if (truncated) {
+      err.message = `${err.message} Gemini cortó la respuesta por límite de tokens (${finishReason}).`;
+    }
+    throw err;
   }
-
-  const result = extractBalanced(cleaned, '{', '}') || extractBalanced(cleaned, '[', ']');
-  if (result) {
-    console.log(`[GEMINI generateJSON] Parsed via extractBalanced. Keys: ${Object.keys(result).join(', ')}`);
-    return result;
-  }
-
-  const bracesMatch = cleaned.match(/(\{[\s\S]*\})/);
-  if (bracesMatch) {
-    try {
-      const parsed = JSON.parse(bracesMatch[1]);
-      console.log(`[GEMINI generateJSON] Parsed via braces regex. Keys: ${Object.keys(parsed).join(', ')}`);
-      return parsed;
-    } catch (_) { /* sigue */ }
-    try {
-      const parsed = JSON.parse(repairJson(bracesMatch[1]));
-      console.log(`[GEMINI generateJSON] Parsed via repaired braces regex. Keys: ${Object.keys(parsed).join(', ')}`);
-      return parsed;
-    } catch (_) { /* sigue */ }
-  }
-
-  const bracketsMatch = cleaned.match(/(\[[\s\S]*\])/);
-  if (bracketsMatch) {
-    try {
-      const parsed = JSON.parse(bracketsMatch[1]);
-      console.log(`[GEMINI generateJSON] Parsed via brackets regex. Keys: ${Object.keys(parsed).join(', ')}`);
-      return parsed;
-    } catch (_) { /* sigue */ }
-    try {
-      const parsed = JSON.parse(repairJson(bracketsMatch[1]));
-      console.log(`[GEMINI generateJSON] Parsed via repaired brackets regex. Keys: ${Object.keys(parsed).join(', ')}`);
-      return parsed;
-    } catch (_) { /* sigue */ }
-  }
-
-  console.error('[GEMINI generateJSON] All parsing strategies failed. Raw content snippet:', raw.slice(0, 500));
-  const err = new Error('No se pudo parsear el JSON devuelto por Gemini.');
-  err.status = 502;
-  err.detail = raw.slice(0, 1000);
-  err.rawLength = raw.length;
-  throw err;
-}
-
-function repairJson(text) {
-  let s = text;
-  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
-  s = s.replace(/(^|[^:])\/\/.*$/gm, '$1');
-  s = s.replace(/[“”«»]/g, '"').replace(/[‘’´`]/g, "'");
-  s = s.replace(/,(\s*[}\]])/g, '$1');
-  return s.trim();
 }
 
 export const MODELS = { DEFAULT_MODEL, FLASH_LITE };

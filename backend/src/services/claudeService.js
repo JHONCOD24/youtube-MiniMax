@@ -1,5 +1,7 @@
 // Servicio de Claude: encapsula la API con reintentos y backoff.
 // Por defecto usa claude-sonnet-4-6.
+import { parseModelJson } from './jsonParse.js';
+
 const BASE_URL = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
@@ -141,73 +143,10 @@ export async function generateJSON({ prompt, system, temperature = 0.7, model, s
     responseFormat: true,
   }, clientKey);
 
-  // Limpiar el JSON si viene envuelto en markdown
-  let cleaned = raw
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/, '')
-    .trim();
-
-  // --- Estrategia multi-capa para extraer JSON ---
-
-  // 1) Intento directo
-  try { return JSON.parse(cleaned); } catch (_) { /* sigue */ }
-
-  // 2) Buscar el bloque { ... } o [ ... ] más externo mediante conteo de llaves
-  function extractBalanced(text, open, close) {
-    let start = -1;
-    let depth = 0;
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (c === open) {
-        if (depth === 0) start = i;
-        depth++;
-      } else if (c === close) {
-        depth--;
-        if (depth === 0 && start >= 0) {
-          const candidate = text.slice(start, i + 1);
-          try { return JSON.parse(candidate); } catch (_) { /* sigue */ }
-          try { return JSON.parse(repairJson(candidate)); } catch (_) { /* sigue */ }
-          start = -1; // seguir buscando más bloques
-        }
-      }
-    }
-    return undefined;
+  try {
+    return parseModelJson(raw, { preferredArrayKeys: ['ideas', 'titulos', 'vias', 'storyboard', 'thumbnails'] });
+  } catch (err) {
+    err.message = (err.message || '').replace('la IA', 'Claude') || 'No se pudo parsear el JSON devuelto por Claude.';
+    throw err;
   }
-
-  const result = extractBalanced(cleaned, '{', '}') || extractBalanced(cleaned, '[', ']');
-  if (result) return result;
-
-  // 3) Buscar con regex: cualquier cosa entre { } o [ ] multínea
-  const bracesMatch = cleaned.match(/(\{[\s\S]*\})/);
-  if (bracesMatch) {
-    try { return JSON.parse(bracesMatch[1]); } catch (_) { /* sigue */ }
-    try { return JSON.parse(repairJson(bracesMatch[1])); } catch (_) { /* sigue */ }
-  }
-  const bracketsMatch = cleaned.match(/(\[[\s\S]*\])/);
-  if (bracketsMatch) {
-    try { return JSON.parse(bracketsMatch[1]); } catch (_) { /* sigue */ }
-    try { return JSON.parse(repairJson(bracketsMatch[1])); } catch (_) { /* sigue */ }
-  }
-
-  // 4) Sin escapatoria
-  const err = new Error('No se pudo parsear el JSON devuelto por Claude.');
-  err.status = 502;
-  err.detail = raw.slice(0, 800);
-  err.rawLength = raw.length;
-  throw err;
-}
-
-// Intenta reparar JSON malformado común: comas trailing, comentarios, comillas tipográficas.
-function repairJson(text) {
-  let s = text;
-  // Quitar comentarios de línea y de bloque
-  s = s.replace(/\/\*[\s\S]*?\*\//g, '');
-  s = s.replace(/(^|[^:])\/\/.*$/gm, '$1');
-  // Comillas tipográficas → rectas
-  s = s.replace(/[“”«»]/g, '"').replace(/[‘’´`]/g, "'");
-  // Quitar comas antes de } o ]
-  s = s.replace(/,(\s*[}\]])/g, '$1');
-  return s.trim();
 }

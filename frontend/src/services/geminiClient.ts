@@ -57,33 +57,37 @@ export async function generarIdeas(opts: {
 }): Promise<VideoIdea[]> {
   if (!opts.geminiDisponible) return DEMO_IDEAS;
 
-  const prompt = `A partir del análisis del nicho "${opts.nicho}", genera 10 ideas de video con alto potencial viral.
+  // Pedimos 8 ideas (no 10) y campos cortos: si el JSON es enorme Gemini lo corta
+  // a mitad de un string y el backend no podía parsearlo.
+  const prompt = `A partir del análisis del nicho "${opts.nicho}", genera EXACTAMENTE 8 ideas de video con alto potencial viral.
 
-Requisitos por idea:
-- título (claro y clicable)
-- hook de 3 segundos (1 frase corta)
-- promesa de valor (qué gana el espectador en 1 frase)
-- ángulo diferenciador (por qué esta versión es distinta)
-- por qué podría viralizar (mecanismo: curiosidad, controversia, transformación, lista, etc.)
-- estructura sugerida (5-8 bullets con tiempos aproximados)
-- justificación de métricas (por qué debería subir CTR/retención/VPH)
-- origen: "kb" (si proviene principalmente de tu Base de Conocimiento), "ai" (si es una idea general del nicho surgida de la investigación de YouTube), "hibrida" (si cruza/condensa información de tu KB con la investigación de YouTube).
-- fuentes: array de referencias específicas. Si usas información de tu Base de Conocimiento, DEBES incluir el ID exacto del documento formateado como "[KB:<id>]" (ej. "[KB:doc-id]"). Si usas datos de los videos analizados, outliers o canales de la investigación, incluye el título o canal formateado como "[Investigación: <título o canal>]" (ej. "[Investigación: Outlier - 5 Hábitos]").
-- desgloseKB: explicación breve (1-2 frases) de qué se tomó como importante de la Base de Conocimiento (documentación cargada por el usuario) para construir esta idea y cómo se incorporó (dejar vacío si el origen es "ai" o no se usó ningún documento).
-- desgloseInvestigacion: explicación breve (1-2 frases) de qué se tomó de la investigación de YouTube (outliers, canales analizados, subnichos) para armar y sustentar esta idea.
+Por cada idea usa campos CORTOS (1 frase, máx. ~20 palabras, salvo estructura):
+- titulo
+- hook (1 frase)
+- promesaValor (1 frase)
+- angulo (1 frase)
+- porQueViral (1 frase: curiosidad, controversia, transformación, lista, etc.)
+- estructuraSugerida: array de 4 a 6 strings cortos con tiempos (ej. "0:00 Hook")
+- justificacionMetricas (1 frase sobre CTR/retención/VPH)
+- origen: "kb" | "ai" | "hibrida"
+- fuentes: array corto (0-3 strings). Si usas KB: "[KB:<id>]". Si usas investigación: "[Investigación: título]"
+- desgloseKB: 1 frase o ""
+- desgloseInvestigacion: 1 frase o ""
 
-Contexto del análisis:
-- Resumen: ${opts.investigacion.resumen}
+IMPORTANTE: responde SOLO con un JSON completo y válido. No dejes el array a medias.
+
+Contexto:
+- Resumen: ${(opts.investigacion.resumen || '').slice(0, 800)}
 - Outliers: ${opts.investigacion.outliers.slice(0, 5).map((o) => `"${o.title}" (${o.views} vistas)`).join('; ')}
-- Subnichos: ${opts.investigacion.subNichos.join(', ')}
-- Ángulos: ${opts.investigacion.angulos.join(', ')}
+- Subnichos: ${opts.investigacion.subNichos.slice(0, 6).join(', ')}
+- Ángulos: ${opts.investigacion.angulos.slice(0, 6).join(', ')}
 
-${opts.knowledgeBase ? `\nBase de conocimiento del usuario (DEBES utilizarla activamente para cruzar datos y enriquecer las ideas híbridas):\n${opts.knowledgeBase}\n` : ''}
+${opts.knowledgeBase ? `\nBase de conocimiento (úsalo si aporta; no copies bloques largos):\n${opts.knowledgeBase.slice(0, 6000)}\n` : ''}
 
-Devuelve un JSON con esta forma: ${JSON_HINT_IDEAS}`;
+Devuelve JSON con esta forma: ${JSON_HINT_IDEAS}`;
   const settings = useApp.getState().settings;
   const provider = settings.proveedorIA;
-  const system = 'Eres un estratega creativo de YouTube en español de Latinoamérica.';
+  const system = 'Eres un estratega creativo de YouTube en español de Latinoamérica. Respuestas JSON compactas y completas.';
   let data;
   if (provider === 'claude') {
     data = await api.claudeJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloClaude);
@@ -92,7 +96,11 @@ Devuelve un JSON con esta forma: ${JSON_HINT_IDEAS}`;
   } else {
     data = await api.geminiJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloGemini);
   }
-  return (data.ideas || []).slice(0, 10).map((it: any, i: number) => normalizeIdea(it, i));
+  const list = Array.isArray(data?.ideas) ? data.ideas : Array.isArray(data) ? data : [];
+  if (!list.length) {
+    throw new Error('La IA no devolvió ideas utilizables. Intenta de nuevo en unos segundos.');
+  }
+  return list.slice(0, 8).map((it: any, i: number) => normalizeIdea(it, i));
 }
 
 export async function generarAssets(opts: {

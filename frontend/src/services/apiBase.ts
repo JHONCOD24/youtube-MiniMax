@@ -2,12 +2,9 @@ export function resolveApiBase(): string {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return String(envUrl).replace(/\/$/, '');
 
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') return '/api';
-  }
-
-  return '';
+  // Si no se define una variable de entorno, asume que el backend
+  // está montado en la misma URL bajo /api (ya sea por Vite proxy en local, o Vercel en prod).
+  return '/api';
 }
 
 export const API_BASE = resolveApiBase();

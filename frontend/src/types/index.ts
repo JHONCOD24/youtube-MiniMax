@@ -170,6 +170,12 @@ export interface Project {
   nichoPersonalizado?: string;
   fechaCreacion: string;
   fechaModificacion: string;
+  /**
+   * Agrupa varias ideas del mismo tema/investigación.
+   * Cada idea elegida y guardada es un proyecto con id propio,
+   * pero comparten familiaId para reconocer que vienen del mismo nicho.
+   */
+  familiaId?: string;
   knowledgeBase?: KnowledgeDocMeta[];
   investigacion?: InvestigationReport;
   ideasGeneradas?: VideoIdea[];

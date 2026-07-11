@@ -118,7 +118,7 @@ export function ProjectStatusBar() {
         </button>
 
         <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 leading-snug">
-          Se guarda solo en <b>este navegador</b>. En Proyectos verás todos tus trabajos.
+          Se guarda en <b>este navegador</b>. Cada idea que elijas queda como proyecto aparte en la lista.
         </p>
       </div>
     </div>

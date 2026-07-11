@@ -127,8 +127,11 @@ export function IdeasPage() {
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Check className="w-5 h-5 text-brand-600 dark:text-brand-400 flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400 mb-0.5">Idea activa</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400 mb-0.5">Idea activa (proyecto propio)</p>
               <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">{proyecto.ideaElegida.titulo}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Si eliges otra idea, la anterior se guarda aparte en <b>Proyectos</b> y no se borra.
+              </p>
             </div>
           </div>
           <button onClick={() => navigate('/assets')} className="btn-primary shrink-0 text-sm gap-2">

@@ -4,7 +4,15 @@
 import { create } from 'zustand';
 import type { Project, AppSettings, VideoIdea, GeneratedAssets, MonetizationReport, InvestigationReport, KnowledgeDocMeta, VideoPlan } from '../types';
 import { KEYS, load, save, type StorageResult } from '../services/storage';
-import { calcularPaso, proyectoTieneContenido, resolverGuardadoProyecto, upsertProyectoEnLista } from '../utils/projectHelpers';
+import {
+  calcularPaso,
+  proyectoTieneContenido,
+  resolverGuardadoProyecto,
+  upsertProyectoEnLista,
+  debeRamificarPorIdea,
+  crearRamaConIdea,
+  congelarProyectoEnLista,
+} from '../utils/projectHelpers';
 import { kbCloneProject, kbPurgeProject } from '../services/kbClient';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -19,8 +27,11 @@ interface State {
   saveStatus: SaveStatus;
   lastSaveError: string;
   lastSavedAt: number | null;
+  /** Aviso amigable (ej. "se creó un proyecto aparte para esta idea") */
+  avisoUsuario: string;
   setBackendKeys: (keys: { youtube: boolean; gemini: boolean; claude: boolean; mistral: boolean }) => void;
   setSyncingActivos: (v: boolean) => void;
+  limpiarAviso: () => void;
   setNicho: (nicho: string, personalizado?: string) => void;
   addKnowledgeDocs: (docs: KnowledgeDocMeta[]) => void;
   removeKnowledgeDoc: (id: string) => void;
@@ -149,17 +160,49 @@ function setSaveUi(status: SaveStatus, error = '') {
  * Escribe proyecto activo + lista de proyectos.
  * Es la única vía de persistencia: auto y botón "Guardar" pasan por aquí.
  */
+function mostrarAviso(msg: string) {
+  store.setState({ avisoUsuario: msg });
+  window.setTimeout(() => {
+    if (store.getState().avisoUsuario === msg) {
+      store.setState({ avisoUsuario: '' });
+    }
+  }, 7000);
+}
+
+function clonarKbSiHaceFalta(idOrigen: string, idDestino: string) {
+  if (!idOrigen || idOrigen === idDestino) return;
+  kbCloneProject(idOrigen, idDestino)
+    .then((metas) => {
+      if (!metas.length) return;
+      const cur = store.getState().proyecto;
+      if (cur.id !== idDestino) return;
+      const conKb = { ...cur, knowledgeBase: metas };
+      const lista = upsertProyectoEnLista(conKb, store.getState().proyectos);
+      save(KEYS.proyectos, lista);
+      save(KEYS.proyectoActivo, conKb);
+      lastSavedJson = JSON.stringify(conKb);
+      store.setState({ proyecto: conKb, proyectos: lista });
+    })
+    .catch((e) => console.warn('No se pudo copiar la KB a la nueva idea', e));
+}
+
 function persistEverything(proyecto: Project, proyectosLista?: Project[], opts?: { renameWithIdea?: boolean }) {
   const listaBase = proyectosLista ?? store.getState().proyectos;
   const ahora = new Date().toISOString();
+  const idAntes = proyecto.id;
 
   let actualizado: Project;
   let nuevos: Project[];
+  let ramifico = false;
 
   if (opts?.renameWithIdea) {
-    ({ actualizado, nuevos } = resolverGuardadoProyecto(proyecto, listaBase, ahora));
+    ({ actualizado, nuevos, ramifico } = resolverGuardadoProyecto(proyecto, listaBase, ahora, uid));
   } else {
-    actualizado = { ...proyecto, fechaModificacion: proyecto.fechaModificacion || ahora };
+    actualizado = {
+      ...proyecto,
+      familiaId: proyecto.familiaId || proyecto.id,
+      fechaModificacion: proyecto.fechaModificacion || ahora,
+    };
     // Solo mete a la lista si hay contenido o ya existía
     if (proyectoTieneContenido(actualizado) || listaBase.some((p) => p.id === actualizado.id)) {
       nuevos = upsertProyectoEnLista(actualizado, listaBase);
@@ -177,13 +220,21 @@ function persistEverything(proyecto: Project, proyectosLista?: Project[], opts?:
       || (!r2.ok ? (r2 as Extract<StorageResult, { ok: false }>).error : null)
       || 'No se pudo guardar';
     setSaveUi('error', err);
-    return { actualizado, nuevos, ok: false as const };
+    return { actualizado, nuevos, ok: false as const, ramifico: false };
   }
 
   lastSavedJson = JSON.stringify(actualizado);
   pendingProyecto = null;
   setSaveUi('saved');
-  return { actualizado, nuevos, ok: true as const };
+
+  if (ramifico && actualizado.id !== idAntes) {
+    clonarKbSiHaceFalta(idAntes, actualizado.id);
+    mostrarAviso(
+      `Se guardó como idea independiente: “${actualizado.nombre}”. La idea anterior sigue en Proyectos.`,
+    );
+  }
+
+  return { actualizado, nuevos, ok: true as const, ramifico };
 }
 
 function flushPendiente(opts?: { renameWithIdea?: boolean }) {
@@ -238,9 +289,11 @@ const store = create<State>((set, get) => ({
   saveStatus: 'idle',
   lastSaveError: '',
   lastSavedAt: null,
+  avisoUsuario: '',
 
   setBackendKeys: (keys) => set({ backendKeys: keys }),
   setSyncingActivos: (v) => set({ syncingActivos: v }),
+  limpiarAviso: () => set({ avisoUsuario: '' }),
 
   setNicho: (nicho, personalizado) => {
     const updated = {
@@ -291,10 +344,38 @@ const store = create<State>((set, get) => ({
     persistNow(updated);
   },
   setIdea: (idea) => {
-    const updated = {
-      ...get().proyecto,
+    const actual = get().proyecto;
+    const ahora = new Date().toISOString();
+
+    // Cada idea elegida es un proyecto independiente.
+    // Si ya había otra idea, congelamos la anterior en la lista y abrimos una rama nueva.
+    if (debeRamificarPorIdea(actual, idea)) {
+      const idOrigen = actual.id;
+      let lista = congelarProyectoEnLista(actual, get().proyectos, ahora);
+      save(KEYS.proyectos, lista);
+
+      const rama = crearRamaConIdea(actual, idea, uid);
+      const r = persistEverything(rama, lista);
+      lista = r.nuevos;
+      set({
+        proyecto: r.actualizado,
+        proyectos: lista,
+        pasoActual: 3,
+      });
+      clonarKbSiHaceFalta(idOrigen, r.actualizado.id);
+      mostrarAviso(
+        `Nueva idea independiente: “${idea.titulo}”. La anterior (“${actual.ideaElegida?.titulo || actual.nombre}”) sigue en Proyectos.`,
+      );
+      return;
+    }
+
+    // Primera idea de este proyecto (o la misma otra vez)
+    const updated: Project = {
+      ...actual,
       ideaElegida: idea,
-      fechaModificacion: new Date().toISOString(),
+      familiaId: actual.familiaId || actual.id,
+      nombre: idea.titulo?.trim() || actual.nombre,
+      fechaModificacion: ahora,
     };
     set({ proyecto: updated, pasoActual: 3 });
     persistNow(updated);

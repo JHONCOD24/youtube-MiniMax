@@ -271,17 +271,27 @@ export function ProyectosPage() {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {proyectos.map((p) => (
             <div key={p.id} className="card p-5 space-y-3 flex flex-col">
-              {/* Nombre y nicho */}
+              {/* Nombre = idea; nicho = tema de investigación */}
               <div className="min-w-0">
                 <h3 className="font-bold text-base truncate text-slate-800 dark:text-slate-100" title={p.nombre}>{p.nombre}</h3>
-                <p className="text-sm text-slate-500 truncate">{p.nicho || 'Sin nicho'}</p>
+                <p className="text-sm text-slate-500 truncate">
+                  {p.nicho || 'Sin nicho'}
+                  {p.ideaElegida?.titulo && p.ideaElegida.titulo !== p.nombre
+                    ? ` · ${p.ideaElegida.titulo}`
+                    : ''}
+                </p>
                 <p className="text-xs text-slate-400 mt-0.5">Modificado: {formatDate(p.fechaModificacion)}</p>
+                {p.familiaId && proyectos.filter((x) => (x.familiaId || x.id) === (p.familiaId || p.id)).length > 1 && (
+                  <p className="text-[11px] text-brand-600 dark:text-brand-400 mt-1">
+                    Varias ideas del mismo tema
+                  </p>
+                )}
               </div>
 
               {/* Chips de estado */}
               <div className="flex flex-wrap gap-1.5">
                 {p.investigacion && <span className="chip">📊 Investigación</span>}
-                {p.ideaElegida && <span className="chip">💡 Idea</span>}
+                {p.ideaElegida && <span className="chip">💡 Idea guardada</span>}
                 {p.assets && <span className="chip">🎬 Activos</span>}
                 {p.monetizacion && <span className="chip">💰 Monetización</span>}
               </div>

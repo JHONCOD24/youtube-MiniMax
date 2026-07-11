@@ -62,7 +62,11 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json(body);
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Backend escuchando en http://localhost:${PORT}`);
-  console.log(`   CORS habilitado para: ${CORS_ORIGIN}`);
-});
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`✅ Backend escuchando en http://localhost:${PORT}`);
+    console.log(`   CORS habilitado para: ${CORS_ORIGIN}`);
+  });
+}
+
+export default app;

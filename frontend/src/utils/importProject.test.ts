@@ -40,5 +40,19 @@ describe('parseMarkdownProject', () => {
     expect(p.nicho).toBe('Finanzas personales');
     expect(p.ideaElegida?.titulo).toBe('Cómo ahorrar $100 al mes');
     expect(p.ideaElegida?.hook).toBe('Nadie te dice esto');
+    expect(p.ideaElegida?.angulo).toBe('Enfoque LATAM');
+  });
+
+  it('reconoce secciones de prompts con acentos (export real)', () => {
+    const md = `# Proyecto musical
+**Nicho:** Fitness
+
+## Prompt Música (Suno)
+\`\`\`
+upbeat electronic, 120 bpm
+\`\`\`
+`;
+    const p = parseMarkdownProject(md);
+    expect(p.assets?.promptMusica).toContain('upbeat electronic');
   });
 });

@@ -44,6 +44,29 @@ function asVerdict(v: any): Verdict {
   return s === 'verde' || s === 'amarillo' || s === 'rojo' ? s : 'amarillo';
 }
 
+// Quita negritas/cursivas de Markdown residuales (`**texto**`, `*texto*`, `_texto_`).
+// El export de la app escribe campos como `**Nicho:** valor`; el parser no debe
+// dejar basura de formato en el dato final.
+function stripMarkdownInline(s: string): string {
+  return String(s || '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/^\*+\s*|\s*\*+$/g, '')
+    .trim();
+}
+
+// Extrae el valor de una línea tipo `**Etiqueta:** valor` o `Etiqueta: valor`.
+// El export escribe la etiqueta en negrita con el `:` dentro: `**Título:** texto`.
+function fieldValue(body: string, label: RegExp): string {
+  const re = new RegExp(
+    String.raw`(?:\*\*|__)?${label.source}(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)`,
+    'i',
+  );
+  const m = body.match(re);
+  return m ? stripMarkdownInline(m[1]) : '';
+}
+
 // ----------------- JSON -----------------
 // Acepta: el Project completo, o un envoltorio { proyecto: ... } o { project: ... }
 export function parseJsonProject(text: string): Project {
@@ -93,12 +116,17 @@ export function parseMarkdownProject(text: string, fallbackName?: string): Proje
   const h1Match = lines.find((l) => /^#\s+/.test(l));
   const nombre = h1Match ? h1Match.replace(/^#\s+/, '').trim() : (fallbackName || 'Proyecto importado');
 
-  // Quitar acentos para matching tolerante
+  // Quitar acentos para matching tolerante (así "Música" = "musica")
   const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  const nichoLine = lines.find((l) => /^\*?\*?Nicho:?\*?\*?\s*:/i.test(l));
+  // Busca la línea de nicho aunque venga envuelta en markdown (`**Nicho:** …`)
+  const nichoLine = lines.find((l) => /nicho\s*:/i.test(stripMarkdownInline(l)) || /\*?nicho\*?\s*:/i.test(l));
   const nicho = nichoLine
-    ? nichoLine.replace(/^\*?\*?Nicho:?\*?\*?\s*:\s*/i, '').replace(/\(.*?\)\s*$/, '').trim()
+    ? stripMarkdownInline(
+        nichoLine
+          .replace(/^[\s*_]*nicho[\s*_]*:\s*/i, '')
+          .replace(/\(.*?\)\s*$/, ''),
+      )
     : '';
 
   // Dividir por secciones ## ...
@@ -116,6 +144,7 @@ export function parseMarkdownProject(text: string, fallbackName?: string): Proje
   }
   if (current) blocks.push(current);
 
+  // Claves en texto plano (NO regex): se comparan normalizadas sin acentos.
   const findBlock = (key: string) =>
     blocks.find((b) => norm(b.title).includes(norm(key)));
 
@@ -163,9 +192,9 @@ export function parseMarkdownProject(text: string, fallbackName?: string): Proje
   let ideaElegida: VideoIdea | undefined;
   const idea = findBlock('Idea');
   if (idea) {
-    const titulo = (idea.body.match(/T[íi]tulo:\s*([^\n]+)/i) || [])[1]?.trim() || nombre;
-    const hook = (idea.body.match(/Hook:\s*([^\n]+)/i) || [])[1]?.trim() || '';
-    const angulo = (idea.body.match(/[ÁA]ngulo:\s*([^\n]+)/i) || [])[1]?.trim() || '';
+    const titulo = fieldValue(idea.body, /T[íi]tulo/i) || nombre;
+    const hook = fieldValue(idea.body, /Hook/i);
+    const angulo = fieldValue(idea.body, /[ÁA]ngulo/i);
     ideaElegida = {
       id: uid(),
       titulo,
@@ -177,16 +206,25 @@ export function parseMarkdownProject(text: string, fallbackName?: string): Proje
   }
 
   // --- Activos (Títulos, Guion, Descripción, Timestamps, Prompts) ---
+  // findBlock usa includes con texto normalizado (sin acentos), no regex.
   let assets: GeneratedAssets | undefined;
-  const titBlock = findBlock('T[íi]tulos') || findBlock('Titulos');
+  const titBlock = findBlock('Titulos');
   const guionBlock = findBlock('Guion');
-  const descBlock = findBlock('Descripci[óo]n SEO') || findBlock('Descripcion SEO') || findBlock('Descripci[óo]n');
+  const descBlock = findBlock('Descripcion SEO') || findBlock('Descripcion');
   const tsBlock = findBlock('Timestamps');
   const pthBlock = findBlock('Prompt Thumbnail');
   const pvidBlock = findBlock('Prompt Video');
-  const pmusBlock = findBlock('Prompt M[úu]sica');
+  // El export usa secciones separadas: "Prompt Música (Suno)" y "Prompt Música (Gemini)"
+  const pmusSuno = blocks.find((b) => {
+    const t = norm(b.title);
+    return t.includes('prompt musica') && t.includes('suno');
+  }) || findBlock('Prompt Musica');
+  const pmusGemini = blocks.find((b) => {
+    const t = norm(b.title);
+    return t.includes('prompt musica') && t.includes('gemini');
+  });
 
-  if (titBlock || guionBlock || descBlock || tsBlock || pthBlock || pvidBlock || pmusBlock) {
+  if (titBlock || guionBlock || descBlock || tsBlock || pthBlock || pvidBlock || pmusSuno || pmusGemini) {
     assets = emptyAssets();
     assets.nicho = nicho;
     assets.tema = nombre;
@@ -229,12 +267,18 @@ export function parseMarkdownProject(text: string, fallbackName?: string): Proje
       const m = pvidBlock.body.match(/```([\s\S]*?)```/);
       assets.promptVideo = (m ? m[1] : pvidBlock.body).trim();
     }
-    if (pmusBlock) {
-      const m = pmusBlock.body.match(/```([\s\S]*?)```/);
-      const raw = (m ? m[1] : pmusBlock.body).trim();
-      assets.promptMusica = raw;
-      assets.promptMusicaGemini = raw;
-    }
+    const extractCode = (block?: { body: string } | null) => {
+      if (!block) return '';
+      const m = block.body.match(/```([\s\S]*?)```/);
+      return (m ? m[1] : block.body).trim();
+    };
+    const suno = extractCode(pmusSuno);
+    const geminiMus = extractCode(pmusGemini);
+    if (suno) assets.promptMusica = suno;
+    if (geminiMus) assets.promptMusicaGemini = geminiMus;
+    // Si solo hay uno, reutilízalo en ambos campos para no dejar vacío el otro
+    if (suno && !geminiMus) assets.promptMusicaGemini = suno;
+    if (geminiMus && !suno) assets.promptMusica = geminiMus;
   }
 
   // --- Monetización ---

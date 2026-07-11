@@ -206,8 +206,29 @@ const store = create<State>((set, get) => ({
 
   guardarProyecto: () => {
     const { proyecto, proyectos } = get();
+    const idAnterior = proyecto.id;
     const ahora = new Date().toISOString();
     const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, proyectos, ahora, uid);
+
+    // Si el guardado crea un id nuevo (porque cambió el nombre por la idea),
+    // hay que copiar la Base de Conocimiento en IndexedDB: los documentos
+    // viven indexados por projectId, no solo en los metadatos del proyecto.
+    if (actualizado.id !== idAnterior) {
+      kbCloneProject(idAnterior, actualizado.id)
+        .then((metas) => {
+          if (!metas.length) return;
+          const conKb = { ...actualizado, knowledgeBase: metas };
+          const lista = get().proyectos.map((p) => (p.id === actualizado.id ? conKb : p));
+          save(KEYS.proyectos, lista);
+          persistProyectoActivo(conKb);
+          set({
+            proyectos: lista,
+            proyecto: get().proyecto.id === actualizado.id ? conKb : get().proyecto,
+          });
+        })
+        .catch((e) => console.warn('No se pudo copiar la KB al nuevo proyecto', e));
+    }
+
     persistProyectoActivo(actualizado);
     save(KEYS.proyectos, nuevos);
     set({ proyecto: actualizado, proyectos: nuevos });

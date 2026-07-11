@@ -15,6 +15,7 @@ export function ExportarPage() {
   const { proyecto } = useApp();
   const [copyOk, setCopyOk] = useState(false);
   const [loading, setLoading] = useState<ExportFormat | null>(null);
+  const [exportError, setExportError] = useState('');
   const p = proyecto;
 
   const toMarkdown = () => {
@@ -75,10 +76,12 @@ export function ExportarPage() {
 
   const handlePdf = async () => {
     setLoading('pdf');
+    setExportError('');
     try {
       exportToPdf(p);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error generando PDF', e);
+      setExportError(e?.message || 'No se pudo generar el PDF. Prueba de nuevo o exporta en Markdown.');
     } finally {
       setLoading(null);
     }
@@ -86,10 +89,12 @@ export function ExportarPage() {
 
   const handleDocx = async () => {
     setLoading('docx');
+    setExportError('');
     try {
       await exportToDocx(p);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error generando DOCX', e);
+      setExportError(e?.message || 'No se pudo generar el Word. Prueba de nuevo o exporta en Markdown.');
     } finally {
       setLoading(null);
     }
@@ -156,6 +161,12 @@ export function ExportarPage() {
           ))}
         </div>
       </div>
+
+      {exportError && (
+        <div className="card p-4 border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 text-sm" role="alert">
+          {exportError}
+        </div>
+      )}
 
       {/* Exportar como presentación */}
       <div className="card overflow-hidden">

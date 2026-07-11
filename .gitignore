@@ -8,3 +8,6 @@ dist
 .idea
 *.tsbuildinfo
 vite.config.*.timestamp-*.mjs
+
+.vercel
+.env*

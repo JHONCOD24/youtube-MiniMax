@@ -244,9 +244,9 @@ export function SettingsPage() {
       <div className="card p-5">
         <h3 className="font-bold mb-2">Sobre los datos y la privacidad</h3>
         <ul className="text-sm text-slate-600 dark:text-slate-300 space-y-1.5">
-          <li>• Las keys se guardan <b>solo en tu navegador</b> (localStorage).</li>
-          <li>• Tu navegador envía cada petición a <b>tu propio backend local</b>, que es quien llama a YouTube/Gemini.</li>
-          <li>• No se envía nada a servidores externos. Todo el trabajo ocurre en tu máquina.</li>
+          <li>• Las keys se guardan <b>solo en tu navegador</b> (localStorage) y se envían al backend en cada prueba/generación (cabeceras <code className="text-xs">x-*-key</code>).</li>
+          <li>• El backend (local o en Vercel en <code className="text-xs">/api</code>) es quien llama a YouTube, Gemini, Claude o Mistral: así las keys no se usan desde el navegador hacia esos proveedores de forma directa.</li>
+          <li>• Opcional: puedes poner las keys también en variables de entorno del backend (<code className="text-xs">YOUTUBE_API_KEY</code>, <code className="text-xs">GEMINI_API_KEY</code>, etc.) y dejar los campos vacíos aquí.</li>
           <li>• Si no configuras keys, la app funciona en <b>modo demo</b> con datos de ejemplo.</li>
         </ul>
       </div>

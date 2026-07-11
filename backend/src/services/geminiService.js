@@ -5,14 +5,25 @@ const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 const FLASH_LITE = 'gemini-2.5-flash-lite';
 
-function buildUrl(model, clientKey = null) {
-  const key = clientKey || process.env.GEMINI_API_KEY;
+function resolveGeminiKey(clientKey = null) {
+  const key = String(clientKey || process.env.GEMINI_API_KEY || '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .trim();
   if (!key) {
-    const err = new Error('Gemini API key no configurada en el backend (.env)');
+    const err = new Error(
+      'Gemini API key no configurada. Pégala en Ajustes y pulsa Probar, o define GEMINI_API_KEY en Vercel.',
+    );
     err.status = 503;
     throw err;
   }
-  return `${BASE_URL}/models/${model}:generateContent?key=${key}`;
+  return key;
+}
+
+function buildUrl(model, clientKey = null) {
+  const key = resolveGeminiKey(clientKey);
+  return `${BASE_URL}/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
 }
 
 async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, systemInstruction }, clientKey = null) {
@@ -28,15 +39,20 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
   const maxAttempts = 3;
   let lastError;
 
+  // Validar la key ANTES del bucle: si falta, error 503 claro (no confundir con red).
+  const url = buildUrl(model, clientKey);
+
   while (attempt < maxAttempts) {
     let res;
     try {
-      res = await fetch(buildUrl(model, clientKey), {
+      res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
     } catch (e) {
+      // No tragarse errores con status propio (p. ej. 503 de key faltante).
+      if (e && e.status) throw e;
       lastError = new Error('No se pudo conectar con Gemini. Revisa tu conexión.');
       lastError.status = 502;
     }

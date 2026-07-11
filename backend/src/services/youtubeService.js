@@ -63,9 +63,15 @@ function trackQuota(endpoint) {
 
 // --- Fetch con manejo de errores ---
 export async function youtubeGet(endpoint, params = {}, clientKey = null) {
-  const apiKey = clientKey || process.env.YOUTUBE_API_KEY;
+  const apiKey = String(clientKey || process.env.YOUTUBE_API_KEY || '')
+    .trim()
+    .replace(/^Bearer\s+/i, '')
+    .replace(/^['"`]+|['"`]+$/g, '')
+    .trim();
   if (!apiKey) {
-    const err = new Error('YouTube API key no configurada en el backend (.env)');
+    const err = new Error(
+      'YouTube API key no configurada. Pégala en Ajustes y pulsa Probar, o define YOUTUBE_API_KEY en Vercel.',
+    );
     err.status = 503;
     throw err;
   }

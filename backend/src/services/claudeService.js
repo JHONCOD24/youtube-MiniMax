@@ -56,6 +56,7 @@ async function callClaude({ model = DEFAULT_MODEL, messages, temperature = 0.8, 
         body: JSON.stringify(body),
       });
     } catch (e) {
+      if (e && e.status) throw e;
       lastError = new Error('No se pudo conectar con Claude. Revisa tu conexión.');
       lastError.status = 502;
     }

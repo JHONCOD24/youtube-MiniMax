@@ -48,20 +48,57 @@ async function request(path: string, body?: any, method: 'GET' | 'POST' = 'POST'
   try {
     res = await fetch(`${BASE}${path}`, opts);
   } catch {
-    throw new ApiError('No se pudo conectar con el backend. Verifica que esté corriendo y que VITE_API_URL apunte al servidor correcto.');
+    throw new ApiError(
+      'No se pudo conectar con el backend. En local arranca con "npm run dev". En Vercel, verifica que /api/health responda JSON.',
+      0,
+    );
   }
 
+  const contentType = res.headers.get('content-type') || '';
   let data: any = null;
-  try { data = await res.json(); } catch { /* puede no haber body */ }
+  let rawText = '';
+  try {
+    rawText = await res.text();
+    if (rawText) {
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = null;
+      }
+    }
+  } catch {
+    /* body vacío o ilegible */
+  }
+
+  // Si Vercel no montó el backend, a veces devuelve HTML (login SSO o el SPA).
+  if (!data && /text\/html/i.test(contentType)) {
+    throw new ApiError(
+      `El backend no respondió en ${BASE}${path} (recibí HTML en vez de JSON, status ${res.status}). ` +
+        'En Vercel el Root Directory del proyecto debe ser la raíz del monorepo (no "frontend") y debe existir la función /api.',
+      res.status || 502,
+    );
+  }
 
   if (!res.ok) {
     const msg = (() => {
       if (res.status === 401 && path.startsWith('/claude')) {
         return 'Claude: API key inválida. Ve a Ajustes, pega una key válida (sk-ant-...) y guarda.';
       }
-      const base = data?.error || `Error ${res.status}`;
+      if (res.status === 404) {
+        return (
+          data?.error ||
+          `Ruta API no encontrada (404): ${BASE}${path}. El backend no está desplegado o la ruta es incorrecta.`
+        );
+      }
+      if (res.status === 429) {
+        return data?.error || 'Demasiadas peticiones. Espera un momento e inténtalo de nuevo.';
+      }
+      if (res.status === 503) {
+        return data?.error || 'Servicio no disponible. Revisa que la API key esté configurada (Ajustes o variables de entorno en Vercel).';
+      }
+      const base = data?.error || (rawText && rawText.length < 200 ? rawText : `Error ${res.status}`);
       if (data?.detail) {
-        return `${base}\n\nRespuesta recibida:\n${data.detail.slice(0, 400)}`;
+        return `${base}\n\nRespuesta recibida:\n${String(data.detail).slice(0, 400)}`;
       }
       return base;
     })();

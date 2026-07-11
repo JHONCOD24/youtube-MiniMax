@@ -10,6 +10,9 @@ export default defineConfig({
     // Exponer el dev server en IPv4/IPv6 para que "localhost" sea accesible.
     host: true,
     port: 5173,
+    watch: {
+      ignored: ['**/vite.config.ts.timestamp-*', '**/*.mjs', '**/*.tmp'],
+    },
     proxy: {
       // Redirige las llamadas /api/* al backend (evita CORS y mantiene las keys seguras).
       '/api': {

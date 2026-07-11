@@ -2,6 +2,7 @@
 // Diseñado con tipografía amplia, espaciado generoso y jerarquía visual clara.
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
+import { useProveedorIA } from '../hooks/useProveedorIA';
 import { generarAssets, regenerarActivosDesdeGuion, normalizeEstrategia } from '../services/geminiClient';
 import { CopyButton } from '../components/CopyButton';
 import { GuionViewer } from '../components/GuionViewer';
@@ -24,7 +25,8 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
 ];
 
 export function AssetsPage() {
-  const { proyecto, setAssets, settings, backendKeys, syncingActivos } = useApp();
+  const { proyecto, setAssets, syncingActivos } = useApp();
+  const { iaDisponible: geminiDisponible } = useProveedorIA();
   const [tab, setTab] = useState<Tab>('titulos');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,11 +36,6 @@ export function AssetsPage() {
   const [showFuentes, setShowFuentes] = useState(false);
 
 
-  const geminiDisponible = settings.proveedorIA === 'claude'
-    ? Boolean(settings.claudeKey) || backendKeys.claude
-    : settings.proveedorIA === 'mistral'
-    ? Boolean(settings.mistralKey) || backendKeys.mistral
-    : Boolean(settings.geminiKey) || backendKeys.gemini;
   const a = proyecto.assets;
   const plan = proyecto.videoPlan;
   const activeTab = TABS.find((t) => t.id === tab) || TABS[0];

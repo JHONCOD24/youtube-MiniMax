@@ -3,6 +3,8 @@
 import { create } from 'zustand';
 import type { Project, AppSettings, VideoIdea, GeneratedAssets, MonetizationReport, InvestigationReport, KnowledgeDocMeta, VideoPlan } from '../types';
 import { KEYS, load, save } from '../services/storage';
+import { calcularPaso, resolverGuardadoProyecto } from '../utils/projectHelpers';
+import { kbCloneProject, kbPurgeProject } from '../services/kbClient';
 
 interface State {
   proyecto: Project;
@@ -10,7 +12,6 @@ interface State {
   pasoActual: number;
   backendKeys: { youtube: boolean; gemini: boolean; claude: boolean; mistral: boolean };
   syncingActivos: boolean;
-  // acciones
   setBackendKeys: (keys: { youtube: boolean; gemini: boolean; claude: boolean; mistral: boolean }) => void;
   setSyncingActivos: (v: boolean) => void;
   setNicho: (nicho: string, personalizado?: string) => void;
@@ -67,7 +68,7 @@ const initialSettings = load<AppSettings>(KEYS.settings, defaultSettings);
 const store = create<State>((set, get) => ({
   proyecto: initialProyecto,
   settings: initialSettings,
-  pasoActual: 0,
+  pasoActual: calcularPaso(initialProyecto),
   temaOscuro: localStorage.getItem(KEYS.theme) === 'dark',
   proyectos: [],
   backendKeys: { youtube: false, gemini: false, claude: false, mistral: false },
@@ -79,7 +80,6 @@ const store = create<State>((set, get) => ({
   setNicho: (nicho, personalizado) => {
     const updated = { ...get().proyecto, nicho, nichoPersonalizado: personalizado, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated, pasoActual: 1 });
-    save(KEYS.proyectoActivo, updated);
   },
   addKnowledgeDocs: (docs) => {
     const base = get().proyecto.knowledgeBase || [];
@@ -89,57 +89,47 @@ const store = create<State>((set, get) => ({
     }
     const updated = { ...get().proyecto, knowledgeBase: merged, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated });
-    save(KEYS.proyectoActivo, updated);
   },
   removeKnowledgeDoc: (id) => {
     const base = get().proyecto.knowledgeBase || [];
     const updated = { ...get().proyecto, knowledgeBase: base.filter((d) => d.id !== id), fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated });
-    save(KEYS.proyectoActivo, updated);
   },
   setInvestigacion: (data) => {
     const updated = { ...get().proyecto, investigacion: data, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated, pasoActual: 2 });
-    save(KEYS.proyectoActivo, updated);
   },
   setIdeasGeneradas: (ideas) => {
     const updated = { ...get().proyecto, ideasGeneradas: ideas, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated });
-    save(KEYS.proyectoActivo, updated);
   },
   setIdea: (idea) => {
     const updated = { ...get().proyecto, ideaElegida: idea, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated, pasoActual: 3 });
-    save(KEYS.proyectoActivo, updated);
   },
   setVideoPlan: (plan) => {
     const updated = { ...get().proyecto, videoPlan: plan, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated });
-    save(KEYS.proyectoActivo, updated);
   },
   setAssets: (assets) => {
     const updated = { ...get().proyecto, assets, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated, pasoActual: 4 });
-    save(KEYS.proyectoActivo, updated);
   },
   updateGuion: (guion) => {
     const { proyecto, proyectos } = get();
     if (!proyecto.assets) return;
     const assets = { ...proyecto.assets, guion };
     const updated = { ...proyecto, assets, fechaModificacion: new Date().toISOString() };
-    // Sincroniza tanto el proyecto activo como la lista de proyectos
     const idx = proyectos.findIndex((p) => p.id === updated.id);
     const nuevos = idx >= 0
       ? [...proyectos.slice(0, idx), updated, ...proyectos.slice(idx + 1)]
       : proyectos;
-    save(KEYS.proyectoActivo, updated);
     save(KEYS.proyectos, nuevos);
     set({ proyecto: updated, proyectos: nuevos });
   },
   setMonetizacion: (m) => {
     const updated = { ...get().proyecto, monetizacion: m, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated, pasoActual: 5 });
-    save(KEYS.proyectoActivo, updated);
   },
   setPaso: (n) => set({ pasoActual: n }),
 
@@ -150,42 +140,29 @@ const store = create<State>((set, get) => ({
       nombre: nombre || `Proyecto ${new Date().toLocaleDateString('es-ES')}`,
     };
     set({ proyecto: p, pasoActual: 0 });
-    save(KEYS.proyectoActivo, p);
+    persistProyectoActivo(p);
     get().cargarProyectos();
   },
 
   cargarProyecto: (id) => {
     const p = get().proyectos.find((x) => x.id === id);
     if (!p) return;
-    // Restaura al paso donde quedó
-    let paso = 0;
-    if (p.investigacion) paso = 2;
-    if (p.ideaElegida) paso = 3;
-    if (p.assets) paso = 4;
-    if (p.monetizacion) paso = 5;
-    set({ proyecto: p, pasoActual: paso });
-    save(KEYS.proyectoActivo, p);
+    set({ proyecto: p, pasoActual: calcularPaso(p) });
+    persistProyectoActivo(p);
   },
 
   importarProyecto: (p) => {
-    // Garantiza ID nuevo para no colisionar con proyectos existentes
     const pNew: Project = { ...p, id: uid(), fechaModificacion: new Date().toISOString() };
     const lista = [...get().proyectos, pNew];
     save(KEYS.proyectos, lista);
-    set({ proyectos: lista });
-    // Lo carga como activo y restaura al paso más avanzado que tenga
-    let paso = 0;
-    if (pNew.investigacion) paso = 2;
-    if (pNew.ideaElegida) paso = 3;
-    if (pNew.assets) paso = 4;
-    if (pNew.monetizacion) paso = 5;
-    set({ proyecto: pNew, pasoActual: paso });
-    save(KEYS.proyectoActivo, pNew);
+    set({ proyectos: lista, proyecto: pNew, pasoActual: calcularPaso(pNew) });
+    persistProyectoActivo(pNew);
   },
 
   eliminarProyecto: (id) => {
     const restantes = get().proyectos.filter((p) => p.id !== id);
     save(KEYS.proyectos, restantes);
+    kbPurgeProject(id).catch((e) => console.warn('No se pudo limpiar la KB del proyecto', e));
     if (get().proyecto.id === id) {
       get().nuevoProyecto();
     } else {
@@ -196,10 +173,31 @@ const store = create<State>((set, get) => ({
   duplicarProyecto: (id) => {
     const original = get().proyectos.find((p) => p.id === id);
     if (!original) return;
-    const copia: Project = { ...original, id: uid(), nombre: `${original.nombre} (copia)`, fechaCreacion: new Date().toISOString(), fechaModificacion: new Date().toISOString() };
+    const copiaId = uid();
+    const copia: Project = {
+      ...original,
+      id: copiaId,
+      nombre: `${original.nombre} (copia)`,
+      fechaCreacion: new Date().toISOString(),
+      fechaModificacion: new Date().toISOString(),
+    };
     const lista = [...get().proyectos, copia];
     save(KEYS.proyectos, lista);
     set({ proyectos: lista });
+
+    kbCloneProject(id, copiaId)
+      .then((metas) => {
+        if (!metas.length) return;
+        set({
+          proyectos: get().proyectos.map((p) =>
+            p.id === copiaId ? { ...p, knowledgeBase: metas } : p,
+          ),
+        });
+        if (get().proyecto.id === copiaId) {
+          set({ proyecto: { ...get().proyecto, knowledgeBase: metas } });
+        }
+      })
+      .catch((e) => console.warn('No se pudo copiar la KB del proyecto', e));
   },
 
   cargarProyectos: () => {
@@ -209,25 +207,8 @@ const store = create<State>((set, get) => ({
   guardarProyecto: () => {
     const { proyecto, proyectos } = get();
     const ahora = new Date().toISOString();
-    // La idea elegida define el nombre destino; si no hay idea, se mantiene el nombre actual.
-    const nombreDestino = proyecto.ideaElegida?.titulo?.trim() || proyecto.nombre;
-    const existente = proyectos.find((p) => p.id === proyecto.id);
-
-    let actualizado: Project;
-    let nuevos: Project[];
-    if (!existente || nombreDestino === existente.nombre) {
-      // Primer guardado de este proyecto, o se guarda de nuevo sobre la misma idea: actualiza en su lugar.
-      actualizado = { ...proyecto, nombre: nombreDestino, fechaModificacion: ahora };
-      nuevos = existente
-        ? proyectos.map((p) => (p.id === actualizado.id ? actualizado : p))
-        : [...proyectos, actualizado];
-    } else {
-      // Se eligió una idea distinta a la del último guardado: crea un proyecto nuevo aparte.
-      actualizado = { ...proyecto, id: uid(), nombre: nombreDestino, fechaCreacion: ahora, fechaModificacion: ahora };
-      nuevos = [...proyectos, actualizado];
-    }
-
-    save(KEYS.proyectoActivo, actualizado);
+    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, proyectos, ahora, uid);
+    persistProyectoActivo(actualizado);
     save(KEYS.proyectos, nuevos);
     set({ proyecto: actualizado, proyectos: nuevos });
   },
@@ -247,13 +228,46 @@ const store = create<State>((set, get) => ({
   },
 }));
 
-// Suscribirse a cambios del proyecto para auto-guardar automáticamente
-let lastProject = store.getState().proyecto;
-store.subscribe((state) => {
-  if (JSON.stringify(lastProject) !== JSON.stringify(state.proyecto)) {
-    save(KEYS.proyectoActivo, state.proyecto);
-    lastProject = state.proyecto;
+// Auto-guardado con debounce: un solo punto de persistencia para el proyecto activo.
+const AUTO_SAVE_MS = 400;
+let pendingProyecto: Project | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let lastSavedJson = JSON.stringify(store.getState().proyecto);
+
+function persistProyectoActivo(proyecto: Project) {
+  pendingProyecto = null;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
   }
+  save(KEYS.proyectoActivo, proyecto);
+  lastSavedJson = JSON.stringify(proyecto);
+}
+
+function flushProyectoActivo() {
+  if (!pendingProyecto) return;
+  const json = JSON.stringify(pendingProyecto);
+  if (json === lastSavedJson) {
+    pendingProyecto = null;
+    return;
+  }
+  persistProyectoActivo(pendingProyecto);
+  pendingProyecto = null;
+}
+
+store.subscribe((state) => {
+  const json = JSON.stringify(state.proyecto);
+  if (json === lastSavedJson) return;
+  pendingProyecto = state.proyecto;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = undefined;
+    flushProyectoActivo();
+  }, AUTO_SAVE_MS);
 });
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => flushProyectoActivo());
+}
 
 export const useApp = store;

@@ -1,5 +1,9 @@
 # Configuración de automatización para Netlify
 # Indica que debe compilar solo la carpeta 'frontend' y desplegar su carpeta 'dist'
+#
+# IMPORTANTE: el backend Express debe desplegarse por separado (Render, Railway, Fly.io…).
+# En Netlify → Site settings → Environment variables, define:
+#   VITE_API_URL = https://tu-backend.onrender.com/api
 
 [build]
   base = "frontend"

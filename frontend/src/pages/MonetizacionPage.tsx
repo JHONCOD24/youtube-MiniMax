@@ -1,21 +1,17 @@
 // Paso 5: Monetización.
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
+import { useProveedorIA } from '../hooks/useProveedorIA';
 import { generarMonetizacion } from '../services/geminiClient';
 import { NICHOS } from '../data/niches';
 import { DollarSign, Loader2, CheckCircle2, Circle, RefreshCw, AlertTriangle } from 'lucide-react';
 import { formatNumber } from '../utils/format';
 
 export function MonetizacionPage() {
-  const { proyecto, setMonetizacion, settings, backendKeys } = useApp();
+  const { proyecto, setMonetizacion } = useApp();
+  const { iaDisponible: geminiDisponible } = useProveedorIA();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const geminiDisponible = settings.proveedorIA === 'claude'
-    ? Boolean(settings.claudeKey) || backendKeys.claude
-    : settings.proveedorIA === 'mistral'
-    ? Boolean(settings.mistralKey) || backendKeys.mistral
-    : Boolean(settings.geminiKey) || backendKeys.gemini;
   const m = proyecto.monetizacion;
   const nichoObj = NICHOS.find((n) => n.nombre === proyecto.nicho) || null;
   // Si la idea elegida cambió desde que se calculó la monetización, los datos quedaron desactualizados.

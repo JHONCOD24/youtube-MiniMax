@@ -5,6 +5,7 @@ import {
   AlertCircle, Sparkles, Loader2, RefreshCw,
 } from 'lucide-react';
 import { useApp } from '../store/useApp';
+import { useProveedorIA } from '../hooks/useProveedorIA';
 import { copyToClipboard } from '../utils/format';
 import { regenerarActivosDesdeGuion } from '../services/geminiClient';
 import { kbBuildContext } from '../services/kbClient';
@@ -134,15 +135,7 @@ export function GuionEditorModal({ open, onClose }: Props) {
   const updateGuion = useApp((s) => s.updateGuion);
   const setAssets = useApp((s) => s.setAssets);
   const setSyncingActivos = useApp((s) => s.setSyncingActivos);
-  const settings = useApp((s) => s.settings);
-  const backendKeys = useApp((s) => s.backendKeys);
-
-  // IA disponible para resincronizar los activos dependientes
-  const iaDisponible = settings.proveedorIA === 'claude'
-    ? Boolean(settings.claudeKey) || backendKeys.claude
-    : settings.proveedorIA === 'mistral'
-    ? Boolean(settings.mistralKey) || backendKeys.mistral
-    : Boolean(settings.geminiKey) || backendKeys.gemini;
+  const { iaDisponible } = useProveedorIA();
 
   // guionBase: el guion que existía cuando el modal se abrió (o cuando se guardó por última vez)
   // Usamos ref para no generar re-renders innecesarios y evitar closures stale

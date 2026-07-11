@@ -26,18 +26,7 @@ app.use(morgan('dev'));
 // CORS dinámico
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir peticiones sin origen (como curl o herramientas de test)
-    if (!origin) return callback(null, true);
-    
-    const isLocalhost = origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:');
-    const isNetlifyOrVercel = origin.endsWith('.netlify.app') || origin.endsWith('.vercel.app');
-    const allowedOrigins = CORS_ORIGIN.split(',').map((o) => o.trim());
-    
-    if (isLocalhost || isNetlifyOrVercel || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Bloqueado por política CORS'));
-    }
+    callback(null, true); // Permitir todo para evitar bloqueos en la red local o apps empaquetadas
   },
   credentials: true,
 }));

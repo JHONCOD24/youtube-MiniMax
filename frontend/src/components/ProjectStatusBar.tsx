@@ -95,7 +95,7 @@ export function ProjectStatusBar() {
           {saved ? (
             <><Check className="w-3.5 h-3.5" /> Guardado</>
           ) : (
-            <><Save className="w-3.5 h-3.5" /> Guardar proyecto</>
+            <><Save className="w-3.5 h-3.5" /> Sincronizar</>
           )}
         </button>
 

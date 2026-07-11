@@ -1,17 +1,19 @@
 import { AlertCircle, Check, Lock } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useApp } from '../store/useApp';
 
 export function AutoSaveInfo() {
+  const onVisitou = useApp((s) => s.settings.onVisitou);
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Mostrar la información solo la primera vez
+    if (!onVisitou) return;
     const hasSeenInfo = localStorage.getItem('ynl.hasSeenAutoSaveInfo');
     if (!hasSeenInfo) {
       setShow(true);
       localStorage.setItem('ynl.hasSeenAutoSaveInfo', 'true');
     }
-  }, []);
+  }, [onVisitou]);
 
   if (!show) return null;
 

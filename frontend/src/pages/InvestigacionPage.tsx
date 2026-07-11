@@ -1,6 +1,7 @@
 // Paso 2: Investigación de mercado del nicho.
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
+import { useProveedorIA } from '../hooks/useProveedorIA';
 import { investigarNicho } from '../services/youtubeClient';
 import { CheckCircle2, AlertTriangle, XCircle, Loader2, TrendingUp, Eye, Flame, BarChart3, Sparkles, Bot, ExternalLink, Trash2, Plus, Wand2 } from 'lucide-react';
 import { formatNumber, formatDate } from '../utils/format';
@@ -9,22 +10,11 @@ import { api } from '../services/api';
 import { kbBuildContext } from '../services/kbClient';
 
 export function InvestigacionPage() {
-  const { proyecto, setInvestigacion, settings, backendKeys, updateSettings } = useApp();
+  const { proyecto, setInvestigacion, updateSettings } = useApp();
+  const { youtubeDisponible, geminiOk, claudeOk, mistralOk, proveedor, investigacionDisponible } = useProveedorIA();
   const [loading, setLoading] = useState(false);
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
-
-  const youtubeDisponible = Boolean(settings.youtubeKey) || backendKeys.youtube;
-  const mistralOk = Boolean(settings.mistralKey) || backendKeys.mistral;
-  const geminiDisponible = settings.proveedorIA === 'claude'
-    ? Boolean(settings.claudeKey) || backendKeys.claude
-    : settings.proveedorIA === 'mistral'
-    ? mistralOk
-    : Boolean(settings.geminiKey) || backendKeys.gemini;
-
-  const geminiOk = Boolean(settings.geminiKey) || backendKeys.gemini;
-  const claudeOk = Boolean(settings.claudeKey) || backendKeys.claude;
-  const proveedor = settings.proveedorIA;
 
   const ejecutar = async () => {
     if (!proyecto.nicho) {
@@ -37,7 +27,7 @@ export function InvestigacionPage() {
       const kb = await kbBuildContext(proyecto.id);
       const data = await investigarNicho({
         nicho: proyecto.nicho,
-        geminiDisponible: geminiDisponible && youtubeDisponible,
+        geminiDisponible: investigacionDisponible,
         onProgress: setProgressMsg,
         knowledgeBase: kb.context,
       });
@@ -186,13 +176,12 @@ function VerdictBadge({ v, text }: { v: Verdict; text: string }) {
 }
 
 function InvestigationView({ data }: { data: InvestigationReport }) {
-  const { setInvestigacion, settings, backendKeys } = useApp();
+  const { setInvestigacion } = useApp();
+  const { youtubeDisponible } = useProveedorIA();
   const [tab, setTab] = useState<'virales' | 'alcance'>('virales');
   const [url, setUrl] = useState('');
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState('');
-
-  const youtubeDisponible = Boolean(settings.youtubeKey) || backendKeys.youtube;
 
   const videosSorted = [...data.topVideos].sort((a, b) => (b.views || 0) - (a.views || 0));
   const outlierIds = new Set((data.outliers || []).map((v) => v.videoId));

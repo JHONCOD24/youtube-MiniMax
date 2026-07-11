@@ -1,6 +1,7 @@
 // Paso 3: Ideas de video.
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
+import { useProveedorIA } from '../hooks/useProveedorIA';
 import { generarIdeas, normalizeIdea } from '../services/geminiClient';
 import { Lightbulb, Loader2, Check, ArrowRight, BookOpen, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -9,7 +10,8 @@ import { VideoDurationModal } from '../components/VideoDurationModal';
 import type { VideoIdea, VideoPlan } from '../types';
 
 export function IdeasPage() {
-  const { proyecto, setIdea, setVideoPlan, setIdeasGeneradas, settings, backendKeys } = useApp();
+  const { proyecto, setIdea, setVideoPlan, setIdeasGeneradas } = useApp();
+  const { iaDisponible: geminiDisponible } = useProveedorIA();
 
   // Inicializa con la lista completa guardada; si no hay, y hay una elegida, la incluye como semilla.
   // Se normaliza cada idea (puede venir de un proyecto guardado con una versión
@@ -30,12 +32,6 @@ export function IdeasPage() {
   const [ideaPendiente, setIdeaPendiente] = useState<VideoIdea | null>(null);
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
-
-  const geminiDisponible = settings.proveedorIA === 'claude'
-    ? Boolean(settings.claudeKey) || backendKeys.claude
-    : settings.proveedorIA === 'mistral'
-    ? Boolean(settings.mistralKey) || backendKeys.mistral
-    : Boolean(settings.geminiKey) || backendKeys.gemini;
 
   const toggleExpand = (id: string) =>
     setExpandidas((prev) => {

@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { Layout } from './components/Layout';
 import { AutoSaveInfo } from './components/AutoSaveInfo';
+import { StorageToast } from './components/StorageToast';
 import { useApp } from './store/useApp';
 import { api } from './services/api';
 
@@ -58,6 +59,7 @@ export default function App() {
   return (
     <>
       <AutoSaveInfo />
+      <StorageToast />
       <Layout>
         <Suspense fallback={<PageLoader />}>
           <Routes>

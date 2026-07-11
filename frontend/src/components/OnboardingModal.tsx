@@ -1,7 +1,7 @@
 // Modal de onboarding (primera visita).
 import { useState } from 'react';
 import { useApp } from '../store/useApp';
-import { X, Sparkles, Wand2, Download } from 'lucide-react';
+import { X, Sparkles, Wand2, Youtube } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export function OnboardingModal() {
@@ -53,8 +53,9 @@ export function OnboardingModal() {
             <Wand2 className="w-4 h-4" /> Empezar (modo demo)
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-4 text-center">
-          💡 Puedes usar la app en <b>modo demo</b> sin keys. Para datos reales, configura YouTube + Gemini en Ajustes.
+        <p className="text-xs text-slate-500 mt-4 text-center flex items-center justify-center gap-1.5 flex-wrap">
+          <Youtube className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
+          <span>Puedes usar la app en <b>modo demo</b> sin keys. Para datos reales, configura YouTube + Gemini en Ajustes.</span>
         </p>
       </div>
     </div>

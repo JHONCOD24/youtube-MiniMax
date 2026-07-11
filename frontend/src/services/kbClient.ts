@@ -1,4 +1,5 @@
 import type { KnowledgeDocMeta } from '../types';
+import { getApiBase } from './apiBase';
 import { kbPut, kbDelete, kbListByProject, kbTotalBytes, type KbDocRecord } from './kbDb';
 
 function uid() {
@@ -26,7 +27,8 @@ async function extractText(file: File): Promise<string> {
 
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch('/api/kb/extract', { method: 'POST', body: fd });
+  const base = getApiBase() || '/api';
+  const res = await fetch(`${base}/kb/extract`, { method: 'POST', body: fd });
   let data: any = null;
   try { data = await res.json(); } catch { /* empty */ }
   if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
@@ -82,10 +84,32 @@ export async function kbIngestText(projectId: string, name: string, text: string
   return { id, name: rec.name, mime: rec.mime, size: rec.size, createdAt };
 }
 
-export async function kbRemove(projectId: string, id: string): Promise<void> {
+export async function kbRemove(_projectId: string, id: string): Promise<void> {
   await kbDelete(id);
-  const existing = await kbListByProject(projectId);
-  if (existing.length === 0) return;
+}
+
+export async function kbPurgeProject(projectId: string): Promise<void> {
+  const docs = await kbListByProject(projectId);
+  await Promise.all(docs.map((d) => kbDelete(d.id)));
+}
+
+export async function kbCloneProject(sourceId: string, targetId: string): Promise<KnowledgeDocMeta[]> {
+  const docs = await kbListByProject(sourceId);
+  const metas: KnowledgeDocMeta[] = [];
+
+  for (const doc of docs) {
+    const id = uid();
+    const createdAt = new Date().toISOString();
+    await kbPut({
+      ...doc,
+      id,
+      projectId: targetId,
+      createdAt,
+    });
+    metas.push({ id, name: doc.name, mime: doc.mime, size: doc.size, createdAt });
+  }
+
+  return metas;
 }
 
 export async function kbBuildContext(projectId: string, maxChars = 20000): Promise<{ context: string; sources: string[] }> {

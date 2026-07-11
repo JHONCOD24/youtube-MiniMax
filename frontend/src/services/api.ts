@@ -1,12 +1,9 @@
 import { useApp } from '../store/useApp';
+import { API_BASE, getApiBase } from './apiBase';
 
-// Capa fina sobre fetch. Lanza errores con mensajes en español.
-// Si se ejecuta en producción (ej. Netlify), apunta al backend local por defecto
-// a menos que se configure VITE_API_URL durante el build.
-const BASE = import.meta.env.VITE_API_URL || 
-  (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? '/api' 
-    : 'http://localhost:4000/api');
+const BASE = API_BASE;
+
+export { getApiBase };
 
 function normalizeSecret(value?: string | null) {
   return String(value || '')
@@ -25,37 +22,33 @@ export class ApiError extends Error {
 }
 
 async function request(path: string, body?: any, method: 'GET' | 'POST' = 'POST') {
+  if (!BASE) {
+    throw new ApiError(
+      'Backend no configurado. Define VITE_API_URL al compilar el frontend (ej. https://tu-api.onrender.com/api) o usa la app en local con npm run dev.',
+      503,
+    );
+  }
+
   const settings = useApp.getState().settings;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const youtubeKey = normalizeSecret(settings.youtubeKey);
   const geminiKey = normalizeSecret(settings.geminiKey);
   const claudeKey = normalizeSecret(settings.claudeKey);
   const mistralKey = normalizeSecret(settings.mistralKey);
-  
-  if (youtubeKey) {
-    headers['x-youtube-key'] = youtubeKey;
-  }
-  if (geminiKey) {
-    headers['x-gemini-key'] = geminiKey;
-  }
-  if (claudeKey) {
-    headers['x-claude-key'] = claudeKey;
-  }
-  if (mistralKey) {
-    headers['x-mistral-key'] = mistralKey;
-  }
 
-  const opts: RequestInit = {
-    method,
-    headers,
-  };
+  if (youtubeKey) headers['x-youtube-key'] = youtubeKey;
+  if (geminiKey) headers['x-gemini-key'] = geminiKey;
+  if (claudeKey) headers['x-claude-key'] = claudeKey;
+  if (mistralKey) headers['x-mistral-key'] = mistralKey;
+
+  const opts: RequestInit = { method, headers };
   if (body) opts.body = JSON.stringify(body);
 
   let res: Response;
   try {
     res = await fetch(`${BASE}${path}`, opts);
-  } catch (e: any) {
-    throw new ApiError('No se pudo conectar con el backend. Verifica que esté corriendo y que el proxy del frontend apunte al puerto correcto.');
+  } catch {
+    throw new ApiError('No se pudo conectar con el backend. Verifica que esté corriendo y que VITE_API_URL apunte al servidor correcto.');
   }
 
   let data: any = null;
@@ -67,7 +60,6 @@ async function request(path: string, body?: any, method: 'GET' | 'POST' = 'POST'
         return 'Claude: API key inválida. Ve a Ajustes, pega una key válida (sk-ant-...) y guarda.';
       }
       const base = data?.error || `Error ${res.status}`;
-      // Si el backend incluyó detail, mostrarlo para depuración
       if (data?.detail) {
         return `${base}\n\nRespuesta recibida:\n${data.detail.slice(0, 400)}`;
       }

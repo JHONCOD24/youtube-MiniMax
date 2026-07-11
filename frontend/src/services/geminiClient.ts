@@ -4,7 +4,7 @@ import type { VideoIdea, GeneratedAssets, MonetizationReport, Niche } from '../t
 import { DEMO_IDEAS, DEMO_ASSETS, DEMO_MONETIZACION } from '../data/demo';
 import { useApp } from '../store/useApp';
 
-const JSON_HINT_IDEAS = `{ideas: [{titulo, hook, angulo, porQueViral, promesaValor, estructuraSugerida, justificacionMetricas, origen, fuentes, desgloseKB, desgloseInvestigacion}]}`;
+const JSON_HINT_IDEAS = `{ideas:[{titulo,hook,promesaValor,angulo,porQueViral,estructuraSugerida,justificacionMetricas,origen,fuentes,desgloseKB,desgloseInvestigacion}]}`;
 const JSON_HINT_ASSETS = `{titulos,guion,descripcionSEO,keywords,timestamps,thumbnails,storyboard,promptVideo,promptMusica,promptMusicaGemini,estrategiaPublicacion,fuentesUtilizadas}`;
 
 function withRatio(prompt: string, ratio: '9:16' | '16:9') {
@@ -57,50 +57,55 @@ export async function generarIdeas(opts: {
 }): Promise<VideoIdea[]> {
   if (!opts.geminiDisponible) return DEMO_IDEAS;
 
-  // Pedimos 8 ideas (no 10) y campos cortos: si el JSON es enorme Gemini lo corta
-  // a mitad de un string y el backend no podía parsearlo.
-  const prompt = `A partir del análisis del nicho "${opts.nicho}", genera EXACTAMENTE 8 ideas de video con alto potencial viral.
+  // Paquete compacto: 6 ideas. Gemini 2.5 a menudo trunca JSON largos (thinking + estructura).
+  const buildPrompt = (count: number, compact: boolean) => `Nicho: "${opts.nicho}". Genera EXACTAMENTE ${count} ideas de video virales en español LATAM.
 
-Por cada idea usa campos CORTOS (1 frase, máx. ~20 palabras, salvo estructura):
-- titulo
-- hook (1 frase)
-- promesaValor (1 frase)
-- angulo (1 frase)
-- porQueViral (1 frase: curiosidad, controversia, transformación, lista, etc.)
-- estructuraSugerida: array de 4 a 6 strings cortos con tiempos (ej. "0:00 Hook")
-- justificacionMetricas (1 frase sobre CTR/retención/VPH)
-- origen: "kb" | "ai" | "hibrida"
-- fuentes: array corto (0-3 strings). Si usas KB: "[KB:<id>]". Si usas investigación: "[Investigación: título]"
-- desgloseKB: 1 frase o ""
-- desgloseInvestigacion: 1 frase o ""
+Cada idea = campos CORTOS (máx 12 palabras por frase):
+- titulo, hook, promesaValor, angulo, porQueViral
+- estructuraSugerida: ${compact ? '3' : '4'} strings tipo "0:00 Hook" (sin párrafos)
+- justificacionMetricas (1 frase corta)
+- origen: "kb"|"ai"|"hibrida"
+- fuentes: [] o 1-2 refs cortas
+- desgloseKB: "" o 1 frase
+- desgloseInvestigacion: "" o 1 frase
 
-IMPORTANTE: responde SOLO con un JSON completo y válido. No dejes el array a medias.
+JSON COMPLETO obligatorio (cierra todos los corchetes). Forma: ${JSON_HINT_IDEAS}
 
-Contexto:
-- Resumen: ${(opts.investigacion.resumen || '').slice(0, 800)}
-- Outliers: ${opts.investigacion.outliers.slice(0, 5).map((o) => `"${o.title}" (${o.views} vistas)`).join('; ')}
-- Subnichos: ${opts.investigacion.subNichos.slice(0, 6).join(', ')}
-- Ángulos: ${opts.investigacion.angulos.slice(0, 6).join(', ')}
+Contexto breve:
+Resumen: ${(opts.investigacion.resumen || '').slice(0, compact ? 400 : 600)}
+Outliers: ${opts.investigacion.outliers.slice(0, 4).map((o) => o.title).join(' | ').slice(0, 400)}
+Subnichos: ${opts.investigacion.subNichos.slice(0, 4).join(', ')}
+Ángulos: ${opts.investigacion.angulos.slice(0, 4).join(', ')}
+${opts.knowledgeBase ? `KB (recortada): ${opts.knowledgeBase.slice(0, compact ? 1500 : 3000)}` : ''}`;
 
-${opts.knowledgeBase ? `\nBase de conocimiento (úsalo si aporta; no copies bloques largos):\n${opts.knowledgeBase.slice(0, 6000)}\n` : ''}
-
-Devuelve JSON con esta forma: ${JSON_HINT_IDEAS}`;
   const settings = useApp.getState().settings;
   const provider = settings.proveedorIA;
-  const system = 'Eres un estratega creativo de YouTube en español de Latinoamérica. Respuestas JSON compactas y completas.';
-  let data;
-  if (provider === 'claude') {
-    data = await api.claudeJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloClaude);
-  } else if (provider === 'mistral') {
-    data = await api.mistralJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloMistral);
-  } else {
-    data = await api.geminiJSON(prompt, system, JSON_HINT_IDEAS, settings.modeloGemini);
+  const system = 'Estratega YouTube LATAM. Solo JSON compacto y completo. Cero prosa.';
+  const model =
+    provider === 'claude' ? settings.modeloClaude
+      : provider === 'mistral' ? settings.modeloMistral
+        : settings.modeloGemini;
+
+  const callJson = (prompt: string) => {
+    if (provider === 'claude') return api.claudeJSON(prompt, system, JSON_HINT_IDEAS, model);
+    if (provider === 'mistral') return api.mistralJSON(prompt, system, JSON_HINT_IDEAS, model);
+    return api.geminiJSON(prompt, system, JSON_HINT_IDEAS, model);
+  };
+
+  let data: any;
+  try {
+    data = await callJson(buildPrompt(6, false));
+  } catch (firstErr: any) {
+    // Reintento ultra-compacto: 4 ideas, menos contexto
+    console.warn('generarIdeas: primer intento falló, reintento compacto', firstErr?.message);
+    data = await callJson(buildPrompt(4, true));
   }
+
   const list = Array.isArray(data?.ideas) ? data.ideas : Array.isArray(data) ? data : [];
   if (!list.length) {
-    throw new Error('La IA no devolvió ideas utilizables. Intenta de nuevo en unos segundos.');
+    throw new Error('La IA no devolvió ideas utilizables. Intenta de nuevo o cambia a Flash-Lite en Ajustes.');
   }
-  return list.slice(0, 8).map((it: any, i: number) => normalizeIdea(it, i));
+  return list.slice(0, 6).map((it: any, i: number) => normalizeIdea(it, i));
 }
 
 export async function generarAssets(opts: {

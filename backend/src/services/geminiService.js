@@ -1,5 +1,5 @@
 // Servicio de Gemini: encapsula la API con reintentos y backoff.
-// Por defecto usa gemini-2.5-flash (alineado con el frontend).
+// Alineado con modelos 2.5 del frontend; desactiva "thinking" para no comerse los tokens del JSON.
 import { parseModelJson } from './jsonParse.js';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
@@ -28,11 +28,15 @@ function buildUrl(model, clientKey = null) {
   return `${BASE_URL}/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
 }
 
+function isGemini25(model) {
+  return /gemini-2\.5/i.test(String(model || ''));
+}
+
 /**
- * Llama a Gemini y devuelve { text, finishReason, truncated }.
- * truncated=true cuando el modelo cortó por MAX_TOKENS u otro límite.
+ * Llama a Gemini y devuelve { text, finishReason, truncated, usage }.
  */
 async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, systemInstruction }, clientKey = null) {
+  const usedModel = model || DEFAULT_MODEL;
   const body = {
     contents,
     generationConfig: { temperature: 0.8, ...generationConfig },
@@ -41,12 +45,22 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
     body.systemInstruction = { role: 'system', parts: [{ text: systemInstruction }] };
   }
 
+  // Gemini 2.5 gasta tokens en "thinking" y deja el JSON a medias.
+  // thinkingBudget: 0 desactiva el razonamiento interno y deja el cupo para la respuesta.
+  if (isGemini25(usedModel)) {
+    body.generationConfig = {
+      ...body.generationConfig,
+      thinkingConfig: {
+        ...(body.generationConfig.thinkingConfig || {}),
+        thinkingBudget: 0,
+      },
+    };
+  }
+
   let attempt = 0;
   const maxAttempts = 3;
   let lastError;
-
-  // Validar la key ANTES del bucle: si falta, error 503 claro (no confundir con red).
-  const url = buildUrl(model, clientKey);
+  const url = buildUrl(usedModel, clientKey);
 
   while (attempt < maxAttempts) {
     let res;
@@ -67,7 +81,10 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
       const candidate = data?.candidates?.[0];
       const text = candidate?.content?.parts?.map((p) => p.text || '').join('') || '';
       const finishReason = candidate?.finishReason || data?.promptFeedback?.blockReason || '';
+      const usage = data?.usageMetadata || null;
+
       if (!text) {
+        // Si thinkingBudget:0 no es soportado, la API a veces responde vacío o error en otro camino.
         const err = new Error(
           finishReason
             ? `Gemini devolvió una respuesta vacía (${finishReason}).`
@@ -77,20 +94,38 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
         throw err;
       }
       const truncated = /MAX_TOKENS|LENGTH/i.test(String(finishReason));
-      return { text, finishReason, truncated };
+      if (usage) {
+        console.log(
+          `[GEMINI] usage prompt=${usage.promptTokenCount || 0} candidates=${usage.candidatesTokenCount || 0} thoughts=${usage.thoughtsTokenCount || 0} total=${usage.totalTokenCount || 0} finish=${finishReason || '—'}`,
+        );
+      }
+      return { text, finishReason, truncated, usage };
     }
 
     if (res) {
       let detail = '';
+      let errJson = null;
       try {
-        const j = await res.json();
-        detail = j?.error?.message || JSON.stringify(j);
+        errJson = await res.json();
+        detail = errJson?.error?.message || JSON.stringify(errJson);
       } catch {
         detail = await res.text().catch(() => '');
       }
-      // 429/503: reintentar con backoff
+
+      // Si thinkingConfig no es aceptado, reintentar sin él una sola vez.
+      if (
+        res.status === 400
+        && /thinking/i.test(detail)
+        && body.generationConfig?.thinkingConfig
+      ) {
+        console.warn('[GEMINI] thinkingConfig rechazado; reintentando sin thinkingConfig');
+        delete body.generationConfig.thinkingConfig;
+        attempt += 1;
+        continue;
+      }
+
       if (res.status === 429 || res.status === 503) {
-        const wait = 500 * Math.pow(2, attempt); // 0.5s, 1s, 2s
+        const wait = 500 * Math.pow(2, attempt);
         await new Promise((r) => setTimeout(r, wait));
         attempt += 1;
         lastError = new Error(`Gemini ${res.status} (reintentando): ${detail}`);
@@ -105,6 +140,39 @@ async function callGemini({ model = DEFAULT_MODEL, contents, generationConfig, s
   }
 
   throw lastError || new Error('Gemini no respondió tras varios reintentos');
+}
+
+// Esquema estricto para ideas: reduce basura y ayuda a no truncar.
+const IDEAS_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    ideas: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          titulo: { type: 'string' },
+          hook: { type: 'string' },
+          promesaValor: { type: 'string' },
+          angulo: { type: 'string' },
+          porQueViral: { type: 'string' },
+          estructuraSugerida: { type: 'array', items: { type: 'string' } },
+          justificacionMetricas: { type: 'string' },
+          origen: { type: 'string' },
+          fuentes: { type: 'array', items: { type: 'string' } },
+          desgloseKB: { type: 'string' },
+          desgloseInvestigacion: { type: 'string' },
+        },
+        required: ['titulo', 'hook', 'angulo', 'porQueViral'],
+      },
+    },
+  },
+  required: ['ideas'],
+};
+
+function looksLikeIdeasRequest(prompt = '', schemaHint = '') {
+  const blob = `${prompt}\n${schemaHint}`.toLowerCase();
+  return blob.includes('"ideas"') || blob.includes('ideas:') || /\bideas\b/.test(blob);
 }
 
 // --- API pública ---
@@ -123,39 +191,73 @@ export async function generateJSON({ prompt, system, temperature = 0.7, model, s
     system || '',
     'INSTRUCCIÓN ESTRICTA DE FORMATO: Tu respuesta debe ser EXCLUSIVAMENTE un objeto JSON válido y COMPLETO.',
     'No escribas prosa, no uses bloques de código ```, no agregues explicaciones antes ni después.',
-    'No incluyas comentarios // ni /* */. No uses comillas tipográficas (“ ” ‘ ’).',
-    'No pongas comas trailing antes de } o ].',
-    'Sé CONCISO en cada campo de texto (máx. 1-2 frases cortas) para no truncar el JSON.',
-    'Empieza tu respuesta con el primer caracter del JSON ( { o [ ) y termina con el último ( } o ] ).',
+    'Sé MUY CONCISO: frases cortas. Prioriza completar el JSON entero antes que alargar un solo campo.',
+    'Empieza con { y termina con }.',
     schemaHint ? `Esquema esperado: ${schemaHint}` : '',
   ].filter(Boolean).join('\n');
 
   const usedModel = model || DEFAULT_MODEL;
-  console.log(`[GEMINI generateJSON] model=${usedModel}. Prompt len: ${prompt.length}`);
+  const forIdeas = looksLikeIdeasRequest(prompt, schemaHint);
 
-  // 8192 a menudo corta packs grandes (10 ideas, assets…). 32k da margen en 2.5-flash.
-  const { text: raw, truncated, finishReason } = await callGemini({
-    model: usedModel,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature,
-      responseMimeType: 'application/json',
-      maxOutputTokens: 32768,
-    },
-    systemInstruction: fullSystem,
-  }, clientKey);
+  console.log(`[GEMINI generateJSON] model=${usedModel} ideas=${forIdeas} promptLen=${prompt.length}`);
 
-  console.log(`[GEMINI generateJSON] raw len=${raw.length} finishReason=${finishReason || '—'} truncated=${!!truncated}`);
+  const generationConfig = {
+    temperature,
+    responseMimeType: 'application/json',
+    // 2.5 con thinking off: 8192 suele bastar; damos 16384 de margen.
+    maxOutputTokens: forIdeas ? 16384 : 32768,
+  };
+
+  if (forIdeas) {
+    generationConfig.responseSchema = IDEAS_RESPONSE_SCHEMA;
+  }
+
+  let raw;
+  let truncated = false;
+  let finishReason = '';
 
   try {
-    const parsed = parseModelJson(raw, { preferredArrayKeys: ['ideas', 'titulos', 'vias', 'storyboard', 'thumbnails'] });
+    const result = await callGemini({
+      model: usedModel,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig,
+      systemInstruction: fullSystem,
+    }, clientKey);
+    raw = result.text;
+    truncated = result.truncated;
+    finishReason = result.finishReason;
+  } catch (e) {
+    // Si responseSchema falla en algún modelo, reintentar sin esquema.
+    if (forIdeas && generationConfig.responseSchema) {
+      console.warn('[GEMINI] responseSchema falló, reintento sin esquema:', e.message);
+      delete generationConfig.responseSchema;
+      const result = await callGemini({
+        model: usedModel,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig,
+        systemInstruction: fullSystem,
+      }, clientKey);
+      raw = result.text;
+      truncated = result.truncated;
+      finishReason = result.finishReason;
+    } else {
+      throw e;
+    }
+  }
+
+  console.log(`[GEMINI generateJSON] rawLen=${raw.length} finish=${finishReason || '—'} truncated=${!!truncated}`);
+
+  try {
+    const parsed = parseModelJson(raw, {
+      preferredArrayKeys: ['ideas', 'titulos', 'vias', 'storyboard', 'thumbnails'],
+    });
     if (truncated) {
-      console.warn('[GEMINI generateJSON] Respuesta truncada por tokens; se recuperó JSON parcial usable.');
+      console.warn('[GEMINI generateJSON] Truncado por tokens; se recuperó JSON parcial usable.');
     }
     return parsed;
   } catch (err) {
-    if (truncated) {
-      err.message = `${err.message} Gemini cortó la respuesta por límite de tokens (${finishReason}).`;
+    if (truncated || /MAX_TOKENS|LENGTH/i.test(finishReason)) {
+      err.message = `${err.message} Gemini cortó la respuesta (${finishReason || 'MAX_TOKENS'}).`;
     }
     throw err;
   }

@@ -4,6 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   Compass, Search, Lightbulb, Wand2, DollarSign, Download, FolderOpen,
   GitCompare, MessageSquareQuote, CalendarDays, Settings, Menu, X, Youtube, Sun, Moon,
+  Check, Loader2, AlertCircle,
 } from 'lucide-react';
 import { useApp } from '../store/useApp';
 import { PipelineProgress } from './PipelineProgress';
@@ -67,6 +68,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const toggleTema = useApp((s) => s.toggleTema);
   const temaOscuro = useApp((s) => s.temaOscuro);
+  const saveStatus = useApp((s) => s.saveStatus);
   const location = useLocation();
 
   // Cierra el menú móvil al navegar
@@ -75,16 +77,33 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Top bar móvil */}
-      <header className="md:hidden sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 flex items-center justify-center">
+      <header className="md:hidden sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 flex items-center justify-center flex-shrink-0">
             <Youtube className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-slate-900 dark:text-white">Mini MX YouTube</span>
+          <span className="font-bold text-slate-900 dark:text-white truncate">Mini MX YouTube</span>
         </div>
-        <button onClick={() => setOpen(true)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Abrir menú">
-          <Menu className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span
+            className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-full ${
+              saveStatus === 'error'
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                : saveStatus === 'saving'
+                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                  : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+            }`}
+            title="Estado del guardado automático"
+          >
+            {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin" />}
+            {saveStatus === 'error' && <AlertCircle className="w-3 h-3" />}
+            {(saveStatus === 'saved' || saveStatus === 'idle') && <Check className="w-3 h-3" />}
+            {saveStatus === 'saving' ? 'Guardando' : saveStatus === 'error' ? 'Error' : 'Guardado'}
+          </span>
+          <button onClick={() => setOpen(true)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Abrir menú">
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* Sidebar desktop */}

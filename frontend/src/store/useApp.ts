@@ -1,10 +1,13 @@
 // Store global mínimo con Zustand.
-// Maneja: proyecto activo, settings, paso del pipeline.
+// Persistencia: TODO cambio del proyecto se guarda solo en el navegador
+// (localStorage): tanto el activo como la lista de Proyectos.
 import { create } from 'zustand';
 import type { Project, AppSettings, VideoIdea, GeneratedAssets, MonetizationReport, InvestigationReport, KnowledgeDocMeta, VideoPlan } from '../types';
-import { KEYS, load, save } from '../services/storage';
-import { calcularPaso, resolverGuardadoProyecto } from '../utils/projectHelpers';
+import { KEYS, load, save, type StorageResult } from '../services/storage';
+import { calcularPaso, proyectoTieneContenido, resolverGuardadoProyecto, upsertProyectoEnLista } from '../utils/projectHelpers';
 import { kbCloneProject, kbPurgeProject } from '../services/kbClient';
+
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface State {
   proyecto: Project;
@@ -12,6 +15,10 @@ interface State {
   pasoActual: number;
   backendKeys: { youtube: boolean; gemini: boolean; claude: boolean; mistral: boolean };
   syncingActivos: boolean;
+  /** Estado visible del auto-guardado */
+  saveStatus: SaveStatus;
+  lastSaveError: string;
+  lastSavedAt: number | null;
   setBackendKeys: (keys: { youtube: boolean; gemini: boolean; claude: boolean; mistral: boolean }) => void;
   setSyncingActivos: (v: boolean) => void;
   setNicho: (nicho: string, personalizado?: string) => void;
@@ -32,23 +39,29 @@ interface State {
   duplicarProyecto: (id: string) => void;
   proyectos: Project[];
   cargarProyectos: () => void;
+  /** Guardado explícito (mismo efecto que auto-guardado + renombra con la idea). */
   guardarProyecto: () => void;
   updateSettings: (s: Partial<AppSettings>) => void;
   toggleTema: () => void;
   temaOscuro: boolean;
 }
 
-function uid() { return Math.random().toString(36).slice(2, 10); }
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
 
-const defaultProyecto: Project = {
-  id: uid(),
-  nombre: 'Nuevo proyecto',
-  nicho: '',
-  fechaCreacion: new Date().toISOString(),
-  fechaModificacion: new Date().toISOString(),
-  knowledgeBase: [],
-  videoPlan: { formato: 'short', duracionSegundos: 60, preset: 'short_rapido' },
-};
+function crearProyectoVacio(nombre?: string): Project {
+  const ahora = new Date().toISOString();
+  return {
+    id: uid(),
+    nombre: nombre || `Proyecto ${new Date().toLocaleDateString('es-ES')}`,
+    nicho: '',
+    fechaCreacion: ahora,
+    fechaModificacion: ahora,
+    knowledgeBase: [],
+    videoPlan: { formato: 'short', duracionSegundos: 60, preset: 'short_rapido' },
+  };
+}
 
 const defaultSettings: AppSettings = {
   youtubeKey: '',
@@ -62,24 +75,182 @@ const defaultSettings: AppSettings = {
   onVisitou: false,
 };
 
-const initialProyecto = load<Project>(KEYS.proyectoActivo, defaultProyecto);
+/** Arranque: recupera activo + lista y los alinea (evita “se borró al recargar”). */
+function bootstrap(): { proyecto: Project; proyectos: Project[] } {
+  let proyectos = load<Project[]>(KEYS.proyectos, []);
+  if (!Array.isArray(proyectos)) proyectos = [];
+
+  let activo = load<Project | null>(KEYS.proyectoActivo, null);
+
+  // Si no hay activo, o está corrupto, usa el más reciente de la lista o crea uno.
+  if (!activo || typeof activo !== 'object' || !activo.id) {
+    if (proyectos.length > 0) {
+      const ordenados = [...proyectos].sort((a, b) =>
+        String(b.fechaModificacion || '').localeCompare(String(a.fechaModificacion || '')),
+      );
+      activo = ordenados[0];
+    } else {
+      activo = crearProyectoVacio();
+    }
+  }
+
+  // El activo con contenido siempre debe estar en la lista de Proyectos.
+  if (proyectoTieneContenido(activo) || proyectos.some((p) => p.id === activo!.id)) {
+    const idx = proyectos.findIndex((p) => p.id === activo!.id);
+    if (idx >= 0) {
+      // Preferimos la versión MÁS reciente entre lista y activo
+      const deLista = proyectos[idx];
+      const tActivo = Date.parse(activo.fechaModificacion || '') || 0;
+      const tLista = Date.parse(deLista.fechaModificacion || '') || 0;
+      if (tActivo >= tLista) {
+        proyectos = upsertProyectoEnLista(activo, proyectos);
+      } else {
+        activo = deLista;
+      }
+    } else if (proyectoTieneContenido(activo)) {
+      proyectos = [...proyectos, activo];
+    }
+  }
+
+  // Persistimos alineación (por si el activo no estaba en la lista).
+  save(KEYS.proyectoActivo, activo);
+  save(KEYS.proyectos, proyectos);
+
+  return { proyecto: activo, proyectos };
+}
+
+const boot = bootstrap();
 const initialSettings = load<AppSettings>(KEYS.settings, defaultSettings);
 
+// --- Persistencia ---
+const AUTO_SAVE_MS = 300;
+let pendingProyecto: Project | null = null;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let lastSavedJson = JSON.stringify(boot.proyecto);
+let savedIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function setSaveUi(status: SaveStatus, error = '') {
+  store.setState({
+    saveStatus: status,
+    lastSaveError: error,
+    lastSavedAt: status === 'saved' ? Date.now() : store.getState().lastSavedAt,
+  });
+  if (status === 'saved') {
+    if (savedIdleTimer) clearTimeout(savedIdleTimer);
+    savedIdleTimer = setTimeout(() => {
+      if (store.getState().saveStatus === 'saved') {
+        store.setState({ saveStatus: 'idle' });
+      }
+    }, 2500);
+  }
+}
+
+/**
+ * Escribe proyecto activo + lista de proyectos.
+ * Es la única vía de persistencia: auto y botón "Guardar" pasan por aquí.
+ */
+function persistEverything(proyecto: Project, proyectosLista?: Project[], opts?: { renameWithIdea?: boolean }) {
+  const listaBase = proyectosLista ?? store.getState().proyectos;
+  const ahora = new Date().toISOString();
+
+  let actualizado: Project;
+  let nuevos: Project[];
+
+  if (opts?.renameWithIdea) {
+    ({ actualizado, nuevos } = resolverGuardadoProyecto(proyecto, listaBase, ahora));
+  } else {
+    actualizado = { ...proyecto, fechaModificacion: proyecto.fechaModificacion || ahora };
+    // Solo mete a la lista si hay contenido o ya existía
+    if (proyectoTieneContenido(actualizado) || listaBase.some((p) => p.id === actualizado.id)) {
+      nuevos = upsertProyectoEnLista(actualizado, listaBase);
+    } else {
+      nuevos = listaBase;
+    }
+  }
+
+  setSaveUi('saving');
+  const r1 = save(KEYS.proyectoActivo, actualizado);
+  const r2 = save(KEYS.proyectos, nuevos);
+
+  if (!r1.ok || !r2.ok) {
+    const err = (!r1.ok ? (r1 as Extract<StorageResult, { ok: false }>).error : null)
+      || (!r2.ok ? (r2 as Extract<StorageResult, { ok: false }>).error : null)
+      || 'No se pudo guardar';
+    setSaveUi('error', err);
+    return { actualizado, nuevos, ok: false as const };
+  }
+
+  lastSavedJson = JSON.stringify(actualizado);
+  pendingProyecto = null;
+  setSaveUi('saved');
+  return { actualizado, nuevos, ok: true as const };
+}
+
+function flushPendiente(opts?: { renameWithIdea?: boolean }) {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+  }
+  const proyecto = pendingProyecto || store.getState().proyecto;
+  const json = JSON.stringify(proyecto);
+  if (json === lastSavedJson && !opts?.renameWithIdea) {
+    pendingProyecto = null;
+    return;
+  }
+  const { actualizado, nuevos } = persistEverything(proyecto, store.getState().proyectos, opts);
+  // Mantener estado en memoria alineado con lo guardado
+  store.setState({ proyecto: actualizado, proyectos: nuevos });
+}
+
+/** Guarda YA (sin esperar el debounce). Usar tras investigación, ideas, etc. */
+function persistNow(proyecto: Project) {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+  }
+  pendingProyecto = null;
+  const { actualizado, nuevos } = persistEverything(proyecto, store.getState().proyectos);
+  store.setState({
+    proyecto: actualizado,
+    proyectos: nuevos,
+    pasoActual: calcularPaso(actualizado),
+  });
+}
+
+function schedulePersist(proyecto: Project) {
+  pendingProyecto = proyecto;
+  if (saveTimer) clearTimeout(saveTimer);
+  setSaveUi('saving');
+  saveTimer = setTimeout(() => {
+    saveTimer = undefined;
+    flushPendiente();
+  }, AUTO_SAVE_MS);
+}
+
 const store = create<State>((set, get) => ({
-  proyecto: initialProyecto,
+  proyecto: boot.proyecto,
   settings: initialSettings,
-  pasoActual: calcularPaso(initialProyecto),
+  pasoActual: calcularPaso(boot.proyecto),
   temaOscuro: localStorage.getItem(KEYS.theme) === 'dark',
-  proyectos: [],
+  proyectos: boot.proyectos,
   backendKeys: { youtube: false, gemini: false, claude: false, mistral: false },
   syncingActivos: false,
+  saveStatus: 'idle',
+  lastSaveError: '',
+  lastSavedAt: null,
 
   setBackendKeys: (keys) => set({ backendKeys: keys }),
   setSyncingActivos: (v) => set({ syncingActivos: v }),
 
   setNicho: (nicho, personalizado) => {
-    const updated = { ...get().proyecto, nicho, nichoPersonalizado: personalizado, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      nicho,
+      nichoPersonalizado: personalizado,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated, pasoActual: 1 });
+    persistNow(updated);
   },
   addKnowledgeDocs: (docs) => {
     const base = get().proyecto.knowledgeBase || [];
@@ -89,74 +260,125 @@ const store = create<State>((set, get) => ({
     }
     const updated = { ...get().proyecto, knowledgeBase: merged, fechaModificacion: new Date().toISOString() };
     set({ proyecto: updated });
+    persistNow(updated);
   },
   removeKnowledgeDoc: (id) => {
     const base = get().proyecto.knowledgeBase || [];
-    const updated = { ...get().proyecto, knowledgeBase: base.filter((d) => d.id !== id), fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      knowledgeBase: base.filter((d) => d.id !== id),
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated });
+    persistNow(updated);
   },
   setInvestigacion: (data) => {
-    const updated = { ...get().proyecto, investigacion: data, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      investigacion: data,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated, pasoActual: 2 });
+    persistNow(updated);
   },
   setIdeasGeneradas: (ideas) => {
-    const updated = { ...get().proyecto, ideasGeneradas: ideas, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      ideasGeneradas: ideas,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated });
+    persistNow(updated);
   },
   setIdea: (idea) => {
-    const updated = { ...get().proyecto, ideaElegida: idea, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      ideaElegida: idea,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated, pasoActual: 3 });
+    persistNow(updated);
   },
   setVideoPlan: (plan) => {
-    const updated = { ...get().proyecto, videoPlan: plan, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      videoPlan: plan,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated });
+    persistNow(updated);
   },
   setAssets: (assets) => {
-    const updated = { ...get().proyecto, assets, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      assets,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated, pasoActual: 4 });
+    persistNow(updated);
   },
   updateGuion: (guion) => {
-    const { proyecto, proyectos } = get();
+    const { proyecto } = get();
     if (!proyecto.assets) return;
     const assets = { ...proyecto.assets, guion };
     const updated = { ...proyecto, assets, fechaModificacion: new Date().toISOString() };
-    const idx = proyectos.findIndex((p) => p.id === updated.id);
-    const nuevos = idx >= 0
-      ? [...proyectos.slice(0, idx), updated, ...proyectos.slice(idx + 1)]
-      : proyectos;
-    save(KEYS.proyectos, nuevos);
-    set({ proyecto: updated, proyectos: nuevos });
+    set({ proyecto: updated });
+    persistNow(updated);
   },
   setMonetizacion: (m) => {
-    const updated = { ...get().proyecto, monetizacion: m, fechaModificacion: new Date().toISOString() };
+    const updated = {
+      ...get().proyecto,
+      monetizacion: m,
+      fechaModificacion: new Date().toISOString(),
+    };
     set({ proyecto: updated, pasoActual: 5 });
+    persistNow(updated);
   },
   setPaso: (n) => set({ pasoActual: n }),
 
   nuevoProyecto: (nombre) => {
-    const p: Project = {
-      ...defaultProyecto,
-      id: uid(),
-      nombre: nombre || `Proyecto ${new Date().toLocaleDateString('es-ES')}`,
-    };
-    set({ proyecto: p, pasoActual: 0 });
-    persistProyectoActivo(p);
-    get().cargarProyectos();
+    // Guarda el actual antes de salir (si tiene contenido)
+    flushPendiente();
+    let lista = get().proyectos;
+    const actual = get().proyecto;
+    if (proyectoTieneContenido(actual)) {
+      const r = persistEverything(actual, lista);
+      lista = r.nuevos;
+    }
+    const p = crearProyectoVacio(nombre);
+    save(KEYS.proyectoActivo, p);
+    lastSavedJson = JSON.stringify(p);
+    set({ proyecto: p, pasoActual: 0, proyectos: lista, saveStatus: 'saved', lastSaveError: '' });
   },
 
   cargarProyecto: (id) => {
-    const p = get().proyectos.find((x) => x.id === id);
+    flushPendiente();
+    // Guarda el actual en la lista antes de cambiar
+    const actual = get().proyecto;
+    if (proyectoTieneContenido(actual)) {
+      persistEverything(actual, get().proyectos);
+    }
+    const lista = load<Project[]>(KEYS.proyectos, get().proyectos);
+    const p = lista.find((x) => x.id === id);
     if (!p) return;
-    set({ proyecto: p, pasoActual: calcularPaso(p) });
-    persistProyectoActivo(p);
+    save(KEYS.proyectoActivo, p);
+    lastSavedJson = JSON.stringify(p);
+    set({ proyecto: p, proyectos: lista, pasoActual: calcularPaso(p), saveStatus: 'saved' });
   },
 
   importarProyecto: (p) => {
-    const pNew: Project = { ...p, id: uid(), fechaModificacion: new Date().toISOString() };
-    const lista = [...get().proyectos, pNew];
+    flushPendiente();
+    const pNew: Project = {
+      ...p,
+      id: uid(),
+      fechaModificacion: new Date().toISOString(),
+      fechaCreacion: p.fechaCreacion || new Date().toISOString(),
+    };
+    const lista = upsertProyectoEnLista(pNew, get().proyectos);
     save(KEYS.proyectos, lista);
-    set({ proyectos: lista, proyecto: pNew, pasoActual: calcularPaso(pNew) });
-    persistProyectoActivo(pNew);
+    save(KEYS.proyectoActivo, pNew);
+    lastSavedJson = JSON.stringify(pNew);
+    set({ proyectos: lista, proyecto: pNew, pasoActual: calcularPaso(pNew), saveStatus: 'saved' });
   },
 
   eliminarProyecto: (id) => {
@@ -164,14 +386,17 @@ const store = create<State>((set, get) => ({
     save(KEYS.proyectos, restantes);
     kbPurgeProject(id).catch((e) => console.warn('No se pudo limpiar la KB del proyecto', e));
     if (get().proyecto.id === id) {
-      get().nuevoProyecto();
+      const p = restantes[0] || crearProyectoVacio();
+      save(KEYS.proyectoActivo, p);
+      lastSavedJson = JSON.stringify(p);
+      set({ proyectos: restantes, proyecto: p, pasoActual: calcularPaso(p) });
     } else {
       set({ proyectos: restantes });
     }
   },
 
   duplicarProyecto: (id) => {
-    const original = get().proyectos.find((p) => p.id === id);
+    const original = get().proyectos.find((p) => p.id === id) || (get().proyecto.id === id ? get().proyecto : null);
     if (!original) return;
     const copiaId = uid();
     const copia: Project = {
@@ -181,21 +406,17 @@ const store = create<State>((set, get) => ({
       fechaCreacion: new Date().toISOString(),
       fechaModificacion: new Date().toISOString(),
     };
-    const lista = [...get().proyectos, copia];
+    const lista = upsertProyectoEnLista(copia, get().proyectos);
     save(KEYS.proyectos, lista);
     set({ proyectos: lista });
 
     kbCloneProject(id, copiaId)
       .then((metas) => {
         if (!metas.length) return;
-        set({
-          proyectos: get().proyectos.map((p) =>
-            p.id === copiaId ? { ...p, knowledgeBase: metas } : p,
-          ),
-        });
-        if (get().proyecto.id === copiaId) {
-          set({ proyecto: { ...get().proyecto, knowledgeBase: metas } });
-        }
+        const conKb = { ...copia, knowledgeBase: metas };
+        const lista2 = upsertProyectoEnLista(conKb, get().proyectos);
+        save(KEYS.proyectos, lista2);
+        set({ proyectos: lista2 });
       })
       .catch((e) => console.warn('No se pudo copiar la KB del proyecto', e));
   },
@@ -205,33 +426,13 @@ const store = create<State>((set, get) => ({
   },
 
   guardarProyecto: () => {
-    const { proyecto, proyectos } = get();
-    const idAnterior = proyecto.id;
-    const ahora = new Date().toISOString();
-    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, proyectos, ahora, uid);
-
-    // Si el guardado crea un id nuevo (porque cambió el nombre por la idea),
-    // hay que copiar la Base de Conocimiento en IndexedDB: los documentos
-    // viven indexados por projectId, no solo en los metadatos del proyecto.
-    if (actualizado.id !== idAnterior) {
-      kbCloneProject(idAnterior, actualizado.id)
-        .then((metas) => {
-          if (!metas.length) return;
-          const conKb = { ...actualizado, knowledgeBase: metas };
-          const lista = get().proyectos.map((p) => (p.id === actualizado.id ? conKb : p));
-          save(KEYS.proyectos, lista);
-          persistProyectoActivo(conKb);
-          set({
-            proyectos: lista,
-            proyecto: get().proyecto.id === actualizado.id ? conKb : get().proyecto,
-          });
-        })
-        .catch((e) => console.warn('No se pudo copiar la KB al nuevo proyecto', e));
+    // Guardado manual: fuerza flush + renombra con la idea elegida
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = undefined;
     }
-
-    persistProyectoActivo(actualizado);
-    save(KEYS.proyectos, nuevos);
-    set({ proyecto: actualizado, proyectos: nuevos });
+    pendingProyecto = get().proyecto;
+    flushPendiente({ renameWithIdea: true });
   },
 
   updateSettings: (s) => {
@@ -249,46 +450,23 @@ const store = create<State>((set, get) => ({
   },
 }));
 
-// Auto-guardado con debounce: un solo punto de persistencia para el proyecto activo.
-const AUTO_SAVE_MS = 400;
-let pendingProyecto: Project | null = null;
-let saveTimer: ReturnType<typeof setTimeout> | undefined;
-let lastSavedJson = JSON.stringify(store.getState().proyecto);
-
-function persistProyectoActivo(proyecto: Project) {
-  pendingProyecto = null;
-  if (saveTimer) {
-    clearTimeout(saveTimer);
-    saveTimer = undefined;
-  }
-  save(KEYS.proyectoActivo, proyecto);
-  lastSavedJson = JSON.stringify(proyecto);
-}
-
-function flushProyectoActivo() {
-  if (!pendingProyecto) return;
-  const json = JSON.stringify(pendingProyecto);
-  if (json === lastSavedJson) {
-    pendingProyecto = null;
-    return;
-  }
-  persistProyectoActivo(pendingProyecto);
-  pendingProyecto = null;
-}
-
-store.subscribe((state) => {
+// Auto-guardado: cualquier cambio de proyecto → lista + activo (con debounce suave).
+// Los hitos grandes (investigación, ideas…) ya llaman persistNow de inmediato.
+store.subscribe((state, prev) => {
+  if (state.proyecto === prev.proyecto) return;
   const json = JSON.stringify(state.proyecto);
   if (json === lastSavedJson) return;
-  pendingProyecto = state.proyecto;
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = undefined;
-    flushProyectoActivo();
-  }, AUTO_SAVE_MS);
+  schedulePersist(state.proyecto);
 });
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => flushProyectoActivo());
+  const flush = () => flushPendiente();
+  window.addEventListener('beforeunload', flush);
+  // pagehide es más fiable en móviles (Safari) que beforeunload
+  window.addEventListener('pagehide', flush);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flush();
+  });
 }
 
 export const useApp = store;

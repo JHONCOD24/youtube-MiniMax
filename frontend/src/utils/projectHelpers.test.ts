@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calcularPaso, resolverGuardadoProyecto } from './projectHelpers';
+import {
+  calcularPaso,
+  proyectoTieneContenido,
+  resolverGuardadoProyecto,
+  upsertProyectoEnLista,
+} from './projectHelpers';
 import type { Project } from '../types';
 
 function proyectoBase(overrides: Partial<Project> = {}): Project {
@@ -29,36 +34,47 @@ describe('calcularPaso', () => {
   });
 });
 
+describe('proyectoTieneContenido', () => {
+  it('detecta borrador vacío', () => {
+    expect(proyectoTieneContenido(proyectoBase())).toBe(false);
+  });
+  it('detecta nicho o investigación', () => {
+    expect(proyectoTieneContenido(proyectoBase({ nicho: 'X' }))).toBe(true);
+    expect(proyectoTieneContenido(proyectoBase({ investigacion: { nicho: 'X' } as any }))).toBe(true);
+  });
+});
+
+describe('upsertProyectoEnLista', () => {
+  it('inserta si no existe y actualiza si existe', () => {
+    const a = proyectoBase({ nicho: 'A' });
+    const lista1 = upsertProyectoEnLista(a, []);
+    expect(lista1).toHaveLength(1);
+    const a2 = { ...a, nicho: 'B' };
+    const lista2 = upsertProyectoEnLista(a2, lista1);
+    expect(lista2).toHaveLength(1);
+    expect(lista2[0].nicho).toBe('B');
+  });
+});
+
 describe('resolverGuardadoProyecto', () => {
   const ahora = '2026-06-16T12:00:00.000Z';
 
   it('agrega el proyecto si no existe en la lista', () => {
     const proyecto = proyectoBase({ nicho: 'Tech' });
-    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, [], ahora, () => 'nuevo-id');
+    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, [], ahora);
     expect(nuevos).toHaveLength(1);
     expect(actualizado.id).toBe('abc');
   });
 
-  it('actualiza en su lugar si el nombre no cambió', () => {
+  it('actualiza en su lugar y renombra con la idea, sin cambiar el id', () => {
     const proyecto = proyectoBase({
       nicho: 'Tech',
-      ideaElegida: { id: 'i1', titulo: 'Mismo título', hook: '', angulo: '', porQueViral: '' },
-    });
-    const existente = { ...proyecto, nombre: 'Mismo título' };
-    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, [existente], ahora, () => 'nuevo-id');
-    expect(nuevos).toHaveLength(1);
-    expect(actualizado.id).toBe('abc');
-    expect(actualizado.nombre).toBe('Mismo título');
-  });
-
-  it('crea un proyecto nuevo si la idea cambió el nombre', () => {
-    const proyecto = proyectoBase({
       ideaElegida: { id: 'i2', titulo: 'Nueva idea viral', hook: '', angulo: '', porQueViral: '' },
     });
     const existente = proyectoBase({ nombre: 'Nombre anterior' });
-    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, [existente], ahora, () => 'xyz999');
-    expect(nuevos).toHaveLength(2);
-    expect(actualizado.id).toBe('xyz999');
+    const { actualizado, nuevos } = resolverGuardadoProyecto(proyecto, [existente], ahora);
+    expect(nuevos).toHaveLength(1);
+    expect(actualizado.id).toBe('abc');
     expect(actualizado.nombre).toBe('Nueva idea viral');
   });
 });

@@ -1,7 +1,6 @@
 // Barra de estado del proyecto actual en la sidebar.
-import { useState } from 'react';
 import { useApp } from '../store/useApp';
-import { Check, Save, FolderOpen } from 'lucide-react';
+import { Check, Save, FolderOpen, Loader2, AlertCircle, Cloud } from 'lucide-react';
 import type { Project } from '../types';
 
 const STEP_NAMES = ['Nicho', 'Investigación', 'Ideas', 'Activos', 'Monetización'];
@@ -17,22 +16,16 @@ function pasosCompletados(p: Project): number {
 
 export function ProjectStatusBar() {
   const proyecto = useApp((s) => s.proyecto);
-  const proyectos = useApp((s) => s.proyectos);
   const guardarProyecto = useApp((s) => s.guardarProyecto);
-  const [saved, setSaved] = useState(false);
+  const saveStatus = useApp((s) => s.saveStatus);
+  const lastSaveError = useApp((s) => s.lastSaveError);
   const completados = pasosCompletados(proyecto);
 
-  // El nombre que se usará al guardar: la idea elegida tiene prioridad
   const nombreDestino = proyecto.ideaElegida?.titulo?.trim() || proyecto.nombre;
-  const existente = proyectos.find((p) => p.id === proyecto.id);
-  // Solo se creará un proyecto nuevo si ya existía uno guardado con otra idea/nombre.
-  const creará = Boolean(existente) && nombreDestino !== existente!.nombre;
-  const renombrará = nombreDestino !== proyecto.nombre;
+  const renombrará = Boolean(proyecto.ideaElegida?.titulo?.trim()) && nombreDestino !== proyecto.nombre;
 
   const handleSave = () => {
     guardarProyecto();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
   };
 
   return (
@@ -47,6 +40,32 @@ export function ProjectStatusBar() {
             title={proyecto.nombre}
           >
             {proyecto.nombre}
+          </span>
+        </div>
+
+        {/* Indicador de auto-guardado (honesto) */}
+        <div
+          className={`flex items-center gap-1.5 text-[11px] px-2 py-1.5 rounded-md border ${
+            saveStatus === 'error'
+              ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900 text-red-700 dark:text-red-300'
+              : saveStatus === 'saving'
+                ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200'
+                : saveStatus === 'saved'
+                  ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900 text-green-700 dark:text-green-300'
+                  : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500'
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          {saveStatus === 'saving' && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />}
+          {saveStatus === 'saved' && <Check className="w-3 h-3 flex-shrink-0" />}
+          {saveStatus === 'error' && <AlertCircle className="w-3 h-3 flex-shrink-0" />}
+          {saveStatus === 'idle' && <Cloud className="w-3 h-3 flex-shrink-0" />}
+          <span className="leading-snug">
+            {saveStatus === 'saving' && 'Guardando en este navegador…'}
+            {saveStatus === 'saved' && 'Guardado automático OK'}
+            {saveStatus === 'error' && (lastSaveError || 'Error al guardar')}
+            {saveStatus === 'idle' && 'Auto-guardado activo'}
           </span>
         </div>
 
@@ -70,41 +89,37 @@ export function ProjectStatusBar() {
           })}
         </div>
 
-        {/* Vista previa del nombre destino cuando es diferente */}
-        {renombrará && !saved && (
+        {renombrará && (
           <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-snug">
-            Se guardará como:{' '}
+            Al guardar se renombrará:{' '}
             <span className="font-semibold text-brand-600 dark:text-brand-400 break-words">
               {nombreDestino}
             </span>
           </p>
         )}
 
-        {/* Botón Guardar */}
         <button
+          type="button"
           onClick={handleSave}
           className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all active:scale-[0.97] ${
-            saved
+            saveStatus === 'saved'
               ? 'bg-green-500 text-white'
               : 'bg-brand-600 hover:bg-brand-700 text-white'
           }`}
-          title={creará
-            ? `Crea un proyecto nuevo en Proyectos con el nombre: "${nombreDestino}"`
-            : `Actualiza el proyecto guardado: "${nombreDestino}"`}
+          title="Guarda el proyecto en la lista de Proyectos (también se guarda solo al trabajar)"
         >
-          {saved ? (
+          {saveStatus === 'saving' ? (
+            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando…</>
+          ) : saveStatus === 'saved' ? (
             <><Check className="w-3.5 h-3.5" /> Guardado</>
           ) : (
-            <><Save className="w-3.5 h-3.5" /> Sincronizar</>
+            <><Save className="w-3.5 h-3.5" /> Guardar proyecto</>
           )}
         </button>
 
-        {/* Confirmación después de guardar */}
-        {saved && (
-          <p className="text-[10px] text-center text-green-600 dark:text-green-400 font-medium">
-            "{nombreDestino}"
-          </p>
-        )}
+        <p className="text-[10px] text-center text-slate-400 dark:text-slate-500 leading-snug">
+          Se guarda solo en <b>este navegador</b>. En Proyectos verás todos tus trabajos.
+        </p>
       </div>
     </div>
   );
